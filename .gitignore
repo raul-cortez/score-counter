@@ -1,0 +1,20 @@
+node_modules
+dist
+.DS_Store
+
+# локальные настройки и секреты
+.env
+.env.*
+!.env.example
+*.local
+
+# база SQLite и её WAL-файлы
+*.db
+*.db-shm
+*.db-wal
+
+# вывод редакторов и инструментов
+.idea
+.vscode
+*.log
+coverage
