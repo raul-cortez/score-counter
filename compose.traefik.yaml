@@ -1,0 +1,32 @@
+# Накладка: трафик пускает уже работающий на машине Traefik.
+#
+# Подходит и тогда, когда Traefik поднят Coolify: панель для этого не нужна,
+# достаточно попасть в его сеть и повесить метки. Имя сети задаётся в .env
+# (у Coolify это обычно `coolify`).
+#
+# Порты наружу не публикуются: до контейнера ходит только прокси.
+
+services:
+  app:
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${PROXY_NETWORK:-proxy}
+
+      traefik.http.routers.score.rule: Host(`${DOMAIN:-score.fastio.ru}`)
+      traefik.http.routers.score.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.score.tls: "true"
+      traefik.http.services.score.loadbalancer.server.port: "3000"
+
+      # Сжатие к потоку событий применять нельзя: буфер компрессора копит кадры,
+      # и обновления приходят пачками вместо того, чтобы идти сразу.
+      traefik.http.middlewares.score-compress.compress.excludedContentTypes: text/event-stream
+      traefik.http.routers.score.middlewares: score-compress
+
+networks:
+  proxy:
+    # Сеть создаёт прокси, а не мы: подключаемся к существующей.
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

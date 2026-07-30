@@ -1,0 +1,53 @@
+# Выкатка без панелей: docker compose и один сервис.
+#
+# Базовый файл наружу не смотрит вообще. Как пустить трафик внутрь — выбирается
+# файлом-накладкой:
+#
+#   docker compose -f compose.yaml -f compose.traefik.yaml up -d --build
+#   docker compose -f compose.yaml -f compose.port.yaml    up -d --build
+#
+# Оба варианта описаны в docs/DEPLOY.md.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: score-counter:${TAG:-latest}
+    container_name: score-counter
+    restart: unless-stopped
+
+    environment:
+      PORT: 3000
+      DB_PATH: /data/score.db
+      STATIC_ROOT: /app/public
+
+    volumes:
+      # История живёт здесь. Без тома передеплой стирает всё.
+      - score-data:/data
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  score-data:

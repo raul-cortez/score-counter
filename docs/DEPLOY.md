@@ -1,59 +1,138 @@
 # Деплой
 
-Один контейнер: Fastify отдаёт API, поток событий и собранный клиент. Секретов нет — токен сессии это случайные байты, в базе лежит только его SHA-256, подписывать нечего.
+Один контейнер: Fastify отдаёт API, поток событий и собранный клиент. Панель не нужна — всё описано конфигами в репозитории.
 
-## Coolify
+Секретов нет. Токен сессии — случайные 32 байта, в базе лежит только его SHA-256, подписывать нечего.
 
-| Параметр | Значение |
+## Что выбрать
+
+Приложение слушает порт 3000 и о TLS ничего не знает. Наружу его выставляет обратный прокси, и от того, какой прокси уже стоит на машине, зависит выбор накладки.
+
+| Накладка | Когда |
 |---|---|
-| Тип | Dockerfile |
-| Порт | `3000` |
-| Домен | `score.fastio.ru` (сертификат из wildcard `*.fastio.ru`) |
-| Том | `/data` — сюда кладётся `score.db` |
-| Лимиты | 256 MB, 0.5 CPU |
+| `compose.traefik.yaml` | На машине уже работает Traefik и у него есть сертификат. Контейнер цепляется к его сети метками. Годится и тогда, когда Traefik поднят Coolify: сама панель при этом не нужна |
+| `compose.port.yaml` | Впереди nginx, Caddy или Traefik с файловым провайдером. Контейнер слушает `127.0.0.1` и наружу не торчит |
 
-Переменные окружения:
+Базовый `compose.yaml` наружу не смотрит вообще: без накладки до приложения не достучаться ниоткуда.
 
+## Первый запуск
+
+```bash
+ssh vps
+git clone <repo> /srv/score-counter && cd /srv/score-counter
+cp .env.example .env && nano .env          # домен, имя сети прокси
+
+# вариант с Traefik
+docker compose -f compose.yaml -f compose.traefik.yaml up -d --build
+
+# вариант с прокси на хосте
+docker compose -f compose.yaml -f compose.port.yaml up -d --build
 ```
-PORT=3000
-DB_PATH=/data/score.db
-STATIC_ROOT=/app/public
+
+Имя сети Traefik подсматривается так:
+
+```bash
+docker inspect $(docker ps -qf name=traefik) --format '{{json .NetworkSettings.Networks}}'
 ```
 
-Последние две уже прописаны в образе — задавать их заново нужно, только если хочется другое расположение.
+У Coolify она обычно называется `coolify`.
 
-**Том обязателен.** Без него база живёт внутри контейнера, и первый же передеплой сотрёт всю историю.
+**Том обязателен и уже описан в `compose.yaml`.** Он переживает `docker compose down`; чтобы стереть историю, нужно явное `down -v`. Не делайте так.
+
+## Прокси на хосте
+
+Для варианта с портом. nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Ради потока событий: без этого обновления копятся в буфере и приходят
+    # пачками через минуты, а выглядит это как «приложение тормозит».
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 1h;
+}
+```
+
+Caddy:
+
+```caddy
+score.fastio.ru {
+    reverse_proxy 127.0.0.1:3000 {
+        flush_interval -1
+    }
+}
+```
+
+`flush_interval -1` у Caddy — то же самое, что `proxy_buffering off` у nginx.
+
+## Обновление
+
+```bash
+cd /srv/score-counter && git pull
+docker compose -f compose.yaml -f compose.traefik.yaml up -d --build
+```
+
+Остановка корректная: сервер ловит `SIGTERM`, закрывает открытые потоки и снимает таймеры, поэтому контейнер гаснет сразу, а не по тайм-ауту. Клиенты переподключаются сами и догружают пропущенное.
+
+Откатиться можно на предыдущий коммит тем же `git checkout` и пересборкой: образ метится переменной `TAG` из `.env`.
 
 ## Проверка после выкатки
 
 ```bash
 curl https://score.fastio.ru/api/health          # {"status":"ok"}
-curl -I https://score.fastio.ru/room/ABC234      # 200, а не 404
-curl -sI https://score.fastio.ru/api/rooms/X/events | grep -i x-accel-buffering
+curl -sI https://score.fastio.ru/room/ABC234     # 200, а не 404
 ```
 
-Третья проверка важнее, чем кажется: если Traefik или другой прокси буферизует ответ, поток событий будет приходить пачками с задержкой в минуты, и это выглядит как «приложение тормозит», а не как ошибка.
+Отдельно стоит убедиться, что поток не буферизуется, — это самая частая поломка за прокси:
 
-## Особенность потока событий
+```bash
+# Должно печатать кадры по мере поступления, а не выдать всё разом в конце.
+curl -N https://score.fastio.ru/api/rooms/КОД/events?ticket=…
+```
 
-Соединение SSE живёт часами. Если между браузером и контейнером появится прокси со своим тайм-аутом на ответ, поток будет рваться. Клиент это переживёт — он переподключается сам и догружает пропущенное, — но на каждое переподключение уходит лишний запрос. Heartbeat раз в 25 секунд рассчитан на прокси с типичным тайм-аутом 30–60 секунд.
+Сервер уже отдаёт `X-Accel-Buffering: no` и `Cache-Control: no-transform`, и шлёт heartbeat раз в 25 секунд. Этого хватает для прокси с типичным тайм-аутом 30–60 секунд.
 
 ## Бэкап
 
 ```bash
-sqlite3 /path/to/score.db ".backup '/backup/score-$(date +%F).db'"
+# -w /app/server обязателен: better-sqlite3 лежит в node_modules сервера,
+# из корня /app он не находится. Старый снимок надо убрать заранее:
+# VACUUM INTO отказывается писать в существующий файл.
+docker exec score-counter rm -f /data/backup.db
+docker exec -w /app/server score-counter node -e "
+  require('better-sqlite3')('/data/score.db').exec(\"VACUUM INTO '/data/backup.db'\")
+"
+docker cp score-counter:/data/backup.db ./score-$(date +%F).db
+docker exec score-counter rm -f /data/backup.db
 ```
 
-Именно `.backup`, а не `cp`: база работает в режиме WAL, и обычное копирование может поймать её на середине записи.
+Именно так, а не копированием файла: база работает в режиме WAL, и обычное `cp` может поймать её на середине записи. `VACUUM INTO` делает согласованный снимок на работающей базе, останавливать контейнер не нужно.
 
-## Обновление
-
-Передеплой из Coolify. Остановка корректная: сервер ловит `SIGTERM`, закрывает открытые потоки и снимает таймеры, поэтому контейнер гаснет сразу, а не по тайм-ауту. Клиенты переподключатся сами.
-
-## Локальная проверка образа
+Восстановление — через служебный контейнер, а не `docker cp`:
 
 ```bash
-docker build -t score-counter:test .
-docker run --rm -p 3399:3000 -v score-data:/data score-counter:test
-open http://127.0.0.1:3399
+docker compose -f compose.yaml -f compose.traefik.yaml stop
+
+docker run --rm -v score-counter_score-data:/data -v "$PWD":/backup alpine sh -c "
+  cp /backup/score-2026-07-30.db /data/score.db &&
+  rm -f /data/score.db-wal /data/score.db-shm &&
+  chown 1000:1000 /data/score.db
+"
+
+docker compose -f compose.yaml -f compose.traefik.yaml start
+```
+
+`chown` здесь не формальность. `docker cp` кладёт файл с идентификатором пользователя с вашей машины, а приложение работает под `node` (uid 1000) — без смены владельца контейнер уходит в цикл перезапусков с `SQLITE_READONLY`. Файлы `-wal` и `-shm` удаляются потому, что они относятся к прежней базе и с восстановленной несовместимы.
+
+## Локальная проверка
+
+```bash
+docker compose -f compose.yaml -f compose.port.yaml up -d --build
+open http://127.0.0.1:3000
+docker compose -f compose.yaml -f compose.port.yaml down
 ```
