@@ -107,13 +107,19 @@ export function removeMember(db: Db, roomId: string, userId: string): void {
   )
 }
 
+/**
+ * Порядок задаёт места за столом, поэтому он обязан быть устойчивым.
+ * joined_at имеет миллисекундное разрешение: вошедшие одновременно получили бы
+ * произвольный порядок и меняли бы места между играми — отсюда user_id вторым ключом.
+ * При возвращении в комнату joined_at не переписывается, так что игрок садится на своё место.
+ */
 export function listMemberIds(db: Db, roomId: string): string[] {
   return (
     db
       .prepare(
         `SELECT user_id FROM room_members
          WHERE room_id = ? AND left_at IS NULL
-         ORDER BY joined_at`,
+         ORDER BY joined_at, user_id`,
       )
       .all(roomId) as { user_id: string }[]
   ).map((row) => row.user_id)
