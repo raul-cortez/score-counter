@@ -12,7 +12,7 @@ import {
   isMember,
   type RoomRow,
 } from '../repo/rooms.js'
-import { buildRoomState } from '../state/roomState.js'
+import { sweepAbandoned } from '../repo/games.js'
 
 const createRoomSchema = {
   body: {
@@ -61,11 +61,13 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
       const room = createRoom(app.db, req.body.name.trim(), passwordHash, host.id)
       addMember(app.db, room.id, host.id)
 
-      return buildRoomState(app.db, room.id)!
+      // Событие не пишется: подписчиков у только что созданной комнаты быть не может.
+      return app.roomState(room.id)!
     },
   )
 
   app.get('/rooms', { preHandler: app.requireAuth }, async () => {
+    sweepAbandoned(app.db, Date.now())
     return listOpenRooms(app.db).map(toRoomSummary)
   })
 
@@ -88,7 +90,8 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
       if (!isMember(app.db, room.id, req.currentUser!.id)) {
         return reply.code(403).send({ error: 'not_a_member' })
       }
-      return buildRoomState(app.db, room.id)!
+      sweepAbandoned(app.db, Date.now())
+      return app.roomState(room.id)!
     },
   )
 
@@ -119,8 +122,16 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      addMember(app.db, room.id, req.currentUser!.id)
-      return buildRoomState(app.db, room.id)!
+      const joined = req.currentUser!
+      // Повторный вход уже состоящего не выдумывает событие: состав не изменился.
+      if (isMember(app.db, room.id, joined.id)) {
+        return app.roomState(room.id)!
+      }
+
+      return app.mutateRoom(room.id, () => {
+        addMember(app.db, room.id, joined.id)
+        return [{ type: 'member_joined', payload: { userId: joined.id } }]
+      })
     },
   )
 
@@ -131,8 +142,15 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
       const room = requireOpenRoom(app, req.params.code, reply)
       if (!room) return reply
 
-      removeMember(app.db, room.id, req.currentUser!.id)
-      return buildRoomState(app.db, room.id)!
+      const leaving = req.currentUser!
+      if (!isMember(app.db, room.id, leaving.id)) {
+        return app.roomState(room.id)!
+      }
+
+      return app.mutateRoom(room.id, () => {
+        removeMember(app.db, room.id, leaving.id)
+        return [{ type: 'member_left', payload: { userId: leaving.id } }]
+      })
     },
   )
 }

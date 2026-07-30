@@ -57,8 +57,39 @@ export type GameDetails = {
 export type RoomState = {
   room: RoomInfo
   members: PublicUser[]
+  /** Кто сейчас держит открытый поток. Живёт в памяти процесса, не в базе. */
+  online: string[]
   game: GameDetails | null
 }
+
+/** Типы записей журнала комнаты. `presence` сюда не входит: он не переживает рестарт. */
+export type RoomEventType =
+  | 'member_joined'
+  | 'member_left'
+  | 'host_changed'
+  | 'game_started'
+  | 'game_finished'
+  | 'entry_added'
+  | 'entry_voided'
+
+export type RoomEvent = {
+  seq: number
+  type: RoomEventType
+  payload: unknown
+  createdAt: number
+}
+
+/**
+ * Кадры, которые сервер шлёт в поток.
+ *
+ * Состояние всегда приезжает снимком целиком — клиент его заменяет, а не собирает
+ * из дельт. `payload` нужен только для уведомлений вида «Петя отменил запись».
+ */
+export type ServerFrame =
+  | { type: 'sync'; seq: number; state: RoomState }
+  | { type: 'missed'; events: RoomEvent[] }
+  | { type: 'presence'; state: RoomState }
+  | { type: RoomEventType; seq: number; payload: unknown; state: RoomState }
 
 export type Game = {
   id: string

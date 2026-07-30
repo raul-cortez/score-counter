@@ -10,7 +10,7 @@ import {
   type GameRow,
 } from '../repo/games.js'
 import { listEntries, findEntryByClientId, insertEntry, voidEntry } from '../repo/entries.js'
-import { buildRoomState } from '../state/roomState.js'
+import type { PendingEvent } from '../realtime/mutate.js'
 import type { Db } from '../db/index.js'
 
 const addEntrySchema = {
@@ -32,15 +32,21 @@ type AddEntryBody = { id: string; userId: string; points: number }
  * Пересчитывает исход по всему журналу и приводит строку игры в соответствие.
  * Вызывается внутри той же транзакции, что и изменение журнала, — иначе два
  * почти одновременных запроса могут объявить двух победителей.
+ *
+ * Возвращает победителя, если игра именно сейчас завершилась: об этом нужно
+ * отдельное событие, чтобы клиент показал экран победы, а не вывел его из снимка.
  */
-function settleGame(db: Db, game: GameRow, playerIds: string[]): void {
+function settleGame(db: Db, game: GameRow, playerIds: string[]): string | null {
   const winner = findWinner(listEntries(db, game.id), playerIds, game.score_limit)
 
   if (winner && game.status === 'active') {
     finishGame(db, game.id, winner)
-  } else if (!winner && game.status === 'finished') {
+    return winner
+  }
+  if (!winner && game.status === 'finished') {
     reopenGame(db, game.id)
   }
+  return null
 }
 
 export default async function entryRoutes(app: FastifyInstance): Promise<void> {
@@ -64,21 +70,28 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'not_allowed' })
       }
 
-      app.db.transaction(() => {
-        // Повтор того же запроса не создаёт вторую запись.
+      return app.mutateRoom(game.room_id, () => {
+        const events: PendingEvent[] = []
+
+        // Повтор того же запроса не создаёт вторую запись — и не порождает события.
         if (findEntryByClientId(app.db, req.body.id) === null) {
-          insertEntry(app.db, {
+          const entry = insertEntry(app.db, {
             id: req.body.id,
             gameId: game.id,
             userId: req.body.userId,
             points: req.body.points,
             createdBy: req.currentUser!.id,
           })
+          events.push({ type: 'entry_added', payload: { entry } })
         }
-        settleGame(app.db, game, playerIds)
-      })()
 
-      return buildRoomState(app.db, game.room_id)!
+        const winner = settleGame(app.db, game, playerIds)
+        if (winner !== null) {
+          events.push({ type: 'game_finished', payload: { gameId: game.id, winnerUserId: winner } })
+        }
+
+        return events
+      })
     },
   )
 
@@ -100,12 +113,12 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'not_allowed' })
       }
 
-      app.db.transaction(() => {
+      return app.mutateRoom(game.room_id, () => {
         voidEntry(app.db, entry.id, req.currentUser!.id)
+        // Отмена может вернуть игру в active — клиент увидит это в снимке.
         settleGame(app.db, game, playerIds)
-      })()
-
-      return buildRoomState(app.db, game.room_id)!
+        return [{ type: 'entry_voided', payload: { entryId: entry.id, userId: entry.userId } }]
+      })
     },
   )
 }

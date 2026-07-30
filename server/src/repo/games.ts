@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Game } from '@score/shared'
 import type { Db } from '../db/index.js'
+import { abandonCutoff } from '../domain/abandoned.js'
 import type { UserRow } from './users.js'
 
 export type GameRow = {
@@ -103,6 +104,25 @@ export function finishGame(db: Db, gameId: string, winnerUserId: string): void {
     `UPDATE games SET status = 'finished', finished_at = ?, winner_user_id = ?
      WHERE id = ? AND status = 'active'`,
   ).run(Date.now(), winnerUserId, gameId)
+}
+
+/**
+ * Гасит активные игры, в которых сутки ничего не происходило.
+ *
+ * Вызывается лениво, при чтении лобби и состояния комнаты, — фоновых таймеров в
+ * процессе нет. Возраст считается по последней записи очков, а не по началу игры:
+ * свежая запись в старой партии означает, что за столом ещё сидят.
+ */
+export function sweepAbandoned(db: Db, now: number): void {
+  db.prepare(
+    `UPDATE games SET status = 'abandoned'
+     WHERE status = 'active'
+       AND MAX(
+             started_at,
+             COALESCE((SELECT MAX(created_at) FROM score_entries
+                        WHERE score_entries.game_id = games.id), 0)
+           ) < ?`,
+  ).run(abandonCutoff(now))
 }
 
 /** Отмена победной записи возвращает игру в активное состояние. */

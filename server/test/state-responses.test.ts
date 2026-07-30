@@ -14,10 +14,12 @@ afterEach(async () => {
 
 /** Стор на клиенте должен разбирать одну форму, а не по одной на маршрут. */
 function expectRoomState(body: any) {
-  expect(Object.keys(body).sort()).toEqual(['game', 'members', 'room'])
+  expect(Object.keys(body).sort()).toEqual(['game', 'members', 'online', 'room'])
   expect(body.room).toEqual(
     expect.objectContaining({ id: expect.any(String), code: expect.any(String) }),
   )
+  // Через inject поток никто не держит, поэтому онлайн пуст, но поле есть всегда.
+  expect(Array.isArray(body.online)).toBe(true)
 }
 
 async function table() {
