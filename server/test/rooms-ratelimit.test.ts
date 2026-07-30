@@ -38,6 +38,34 @@ describe('ограничение попыток входа', () => {
     expect(codes.at(-1)).toBe(429)
   })
 
+  it('отдаёт отказ в той же форме, что и остальные ошибки', async () => {
+    const anya = await createGuestSession(ctx.app, 'Аня')
+    const boris = await createGuestSession(ctx.app, 'Борис')
+    const room = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/rooms',
+      headers: bearer(anya),
+      payload: { name: 'Закрытая', password: 'дружеский' },
+    })
+    const roomId = room.json().id
+
+    let last
+    for (let attempt = 0; attempt < 12; attempt++) {
+      last = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/rooms/${roomId}/join`,
+        headers: bearer(boris),
+        payload: { password: `подбор-${attempt}` },
+      })
+    }
+
+    expect(last!.statusCode).toBe(429)
+    expect(last!.json()).toEqual({
+      error: 'too_many_attempts',
+      message: expect.any(String),
+    })
+  })
+
   it('не мешает входить в другую комнату', async () => {
     const anya = await createGuestSession(ctx.app, 'Аня')
     const boris = await createGuestSession(ctx.app, 'Борис')

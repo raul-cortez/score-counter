@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import type { Db } from './db/index.js'
 import authPlugin from './plugins/auth.js'
+import errorsPlugin from './plugins/errors.js'
 import authRoutes from './routes/auth.js'
 import roomRoutes from './routes/rooms.js'
 import gameRoutes from './routes/games.js'
@@ -35,7 +36,15 @@ export function buildApp(db: Db): FastifyInstance {
 
   app.decorate('db', db)
   // global: false — ограничения включаются точечно там, где они нужны.
-  app.register(rateLimit, { global: false })
+  app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'too_many_attempts',
+      message: 'слишком много попыток, попробуйте позже',
+    }),
+  })
+  app.register(errorsPlugin)
   app.register(authPlugin)
 
   app.get('/api/health', async () => ({ status: 'ok' }))
