@@ -6,6 +6,7 @@ import {
   attachEmail,
 } from '../repo/users.js'
 import { createSession } from '../repo/sessions.js'
+import { findActiveRoomCode } from '../repo/rooms.js'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
 
 const guestSchema = {
@@ -84,6 +85,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   )
 
   app.get('/me', { preHandler: app.requireAuth }, async (req) => {
-    return toPublicUser(req.currentUser!)
+    const user = req.currentUser!
+    return {
+      ...toPublicUser(user),
+      activeRoomCode: findActiveRoomCode(app.db, user.id),
+    }
   })
 }

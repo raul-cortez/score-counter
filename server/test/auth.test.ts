@@ -71,7 +71,7 @@ describe('GET /api/me', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual(guest.user)
+    expect(res.json()).toEqual({ ...guest.user, activeRoomCode: null })
   })
 
   it('отвечает 401 без токена', async () => {

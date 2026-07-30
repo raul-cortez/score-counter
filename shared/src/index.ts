@@ -6,6 +6,11 @@ export type PublicUser = {
   hasEmail: boolean
 }
 
+/** Себя видно подробнее: клиенту нужно знать, куда вернуться после перезагрузки. */
+export type CurrentUser = PublicUser & {
+  activeRoomCode: string | null
+}
+
 export type ScoreEntry = {
   seq: number
   id: string

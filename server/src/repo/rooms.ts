@@ -139,6 +139,22 @@ export function listMembers(db: Db, roomId: string): UserRow[] {
     .all(roomId) as UserRow[]
 }
 
+/** Последняя открытая комната, в которой человек состоит, — куда вернуть его после F5. */
+export function findActiveRoomCode(db: Db, userId: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT rooms.code FROM room_members
+       JOIN rooms ON rooms.id = room_members.room_id
+       WHERE room_members.user_id = ?
+         AND room_members.left_at IS NULL
+         AND rooms.closed_at IS NULL
+       ORDER BY room_members.joined_at DESC, rooms.code DESC
+       LIMIT 1`,
+    )
+    .get(userId) as { code: string } | undefined
+  return row?.code ?? null
+}
+
 export function isMember(db: Db, roomId: string, userId: string): boolean {
   const row = db
     .prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ? AND left_at IS NULL')
