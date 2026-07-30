@@ -20,7 +20,7 @@ afterEach(async () => {
   await closeApp(ctx)
 })
 
-type Table = { roomId: string; gameId: string; anya: Guest; boris: Guest }
+type Table = { roomCode: string; gameId: string; anya: Guest; boris: Guest }
 
 async function tableOfTwo(app: FastifyInstance, scoreLimit: number): Promise<Table> {
   const anya = await createGuestSession(app, 'Аня')
@@ -31,20 +31,20 @@ async function tableOfTwo(app: FastifyInstance, scoreLimit: number): Promise<Tab
     headers: bearer(anya),
     payload: { name: 'Вечер преферанса' },
   })
-  const roomId = room.json().id
+  const roomCode = room.json().room.code
   await app.inject({
     method: 'POST',
-    url: `/api/rooms/${roomId}/join`,
+    url: `/api/rooms/${roomCode}/join`,
     headers: bearer(boris),
     payload: {},
   })
   const game = await app.inject({
     method: 'POST',
-    url: `/api/rooms/${roomId}/games`,
+    url: `/api/rooms/${roomCode}/games`,
     headers: bearer(anya),
     payload: { scoreLimit },
   })
-  return { roomId, gameId: game.json().id, anya, boris }
+  return { roomCode, gameId: game.json().game.id, anya, boris }
 }
 
 function addEntry(app: FastifyInstance, gameId: string, actor: Guest, points: number) {
@@ -107,21 +107,20 @@ describe('завершение игры', () => {
   })
 
   it('позволяет стартовать новую игру тем же составом после победы', async () => {
-    const { roomId, gameId, anya, boris } = await tableOfTwo(ctx.app, 50)
+    const { roomCode, gameId, anya, boris } = await tableOfTwo(ctx.app, 50)
     await addEntry(ctx.app, gameId, boris, 50)
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 50 },
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().id).not.toBe(gameId)
-    expect(res.json().playerIds).toEqual(
-      expect.arrayContaining([anya.user.id, boris.user.id]),
+    expect(res.json().game.id).not.toBe(gameId)
+    expect(res.json().game.players.map((p: { id: string }) => p.id).sort()).toEqual(
+      [anya.user.id, boris.user.id].sort(),
     )
-    expect(res.json().playerIds).toHaveLength(2)
   })
 })

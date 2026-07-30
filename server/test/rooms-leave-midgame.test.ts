@@ -22,20 +22,20 @@ describe('выход из комнаты во время игры', () => {
       headers: bearer(anya),
       payload: { name: 'Вечер преферанса' },
     })
-    const roomId = room.json().id
+    const roomCode = room.json().room.code
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/join`,
+      url: `/api/rooms/${roomCode}/join`,
       headers: bearer(boris),
       payload: {},
     })
     const game = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
-    const gameId = game.json().id
+    const gameId = game.json().game.id
     await ctx.app.inject({
       method: 'POST',
       url: `/api/games/${gameId}/entries`,
@@ -45,7 +45,7 @@ describe('выход из комнаты во время игры', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/leave`,
+      url: `/api/rooms/${roomCode}/leave`,
       headers: bearer(boris),
     })
 
@@ -67,34 +67,34 @@ describe('выход из комнаты во время игры', () => {
       headers: bearer(anya),
       payload: { name: 'Вечер преферанса' },
     })
-    const roomId = room.json().id
+    const roomCode = room.json().room.code
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/join`,
+      url: `/api/rooms/${roomCode}/join`,
       headers: bearer(boris),
       payload: {},
     })
     const game = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/leave`,
+      url: `/api/rooms/${roomCode}/leave`,
       headers: bearer(boris),
     })
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/join`,
+      url: `/api/rooms/${roomCode}/join`,
       headers: bearer(boris),
       payload: {},
     })
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/games/${game.json().id}/entries`,
+      url: `/api/games/${game.json().game.id}/entries`,
       headers: bearer(boris),
       payload: { id: randomUUID(), userId: boris.user.id, points: 10 },
     })

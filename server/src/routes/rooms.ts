@@ -1,15 +1,18 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { RoomSummary } from '@score/shared'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
 import {
   createRoom,
   addMember,
   removeMember,
   listOpenRooms,
-  findRoomById,
   findRoomByCode,
   findRoomSummary,
   toRoomSummary,
+  isMember,
+  type RoomRow,
 } from '../repo/rooms.js'
+import { buildRoomState } from '../state/roomState.js'
 
 const createRoomSchema = {
   body: {
@@ -33,6 +36,20 @@ const joinSchema = {
   },
 }
 
+/** Код приходит из ссылки, которую могли продиктовать голосом, — регистр не важен. */
+function requireOpenRoom(app: FastifyInstance, code: string, reply: FastifyReply): RoomRow | null {
+  const room = findRoomByCode(app.db, code.toUpperCase())
+  if (!room || room.closed_at !== null) {
+    reply.code(404).send({ error: 'room_not_found' })
+    return null
+  }
+  return room
+}
+
+function summaryOf(app: FastifyInstance, roomId: string): RoomSummary {
+  return toRoomSummary(findRoomSummary(app.db, roomId)!)
+}
+
 export default async function roomRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { name: string; password?: string } }>(
     '/rooms',
@@ -44,7 +61,7 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
       const room = createRoom(app.db, req.body.name.trim(), passwordHash, host.id)
       addMember(app.db, room.id, host.id)
 
-      return toRoomSummary(findRoomSummary(app.db, room.id)!)
+      return buildRoomState(app.db, room.id)!
     },
   )
 
@@ -53,19 +70,30 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
   })
 
   app.get<{ Params: { code: string } }>(
-    '/rooms/by-code/:code',
+    '/rooms/:code',
     { preHandler: app.requireAuth },
     async (req, reply) => {
-      const room = findRoomByCode(app.db, req.params.code.toUpperCase())
-      if (!room || room.closed_at !== null) {
-        return reply.code(404).send({ error: 'room_not_found' })
-      }
-      return toRoomSummary(findRoomSummary(app.db, room.id)!)
+      const room = requireOpenRoom(app, req.params.code, reply)
+      if (!room) return reply
+      return summaryOf(app, room.id)
     },
   )
 
-  app.post<{ Params: { id: string }; Body: { password?: string } }>(
-    '/rooms/:id/join',
+  app.get<{ Params: { code: string } }>(
+    '/rooms/:code/state',
+    { preHandler: app.requireAuth },
+    async (req, reply) => {
+      const room = requireOpenRoom(app, req.params.code, reply)
+      if (!room) return reply
+      if (!isMember(app.db, room.id, req.currentUser!.id)) {
+        return reply.code(403).send({ error: 'not_a_member' })
+      }
+      return buildRoomState(app.db, room.id)!
+    },
+  )
+
+  app.post<{ Params: { code: string }; Body: { password?: string } }>(
+    '/rooms/:code/join',
     {
       schema: joinSchema,
       preHandler: app.requireAuth,
@@ -75,16 +103,14 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
           timeWindow: '5 minutes',
           // Ключ по паре «клиент + комната»: подбор пароля к одной комнате
           // не должен закрывать вход в остальные.
-          keyGenerator: (req: { ip: string; params: unknown }) =>
-            `${req.ip}:${(req.params as { id: string }).id}`,
+          keyGenerator: (req: FastifyRequest) =>
+            `${req.ip}:${(req.params as { code: string }).code.toUpperCase()}`,
         },
       },
     },
     async (req, reply) => {
-      const room = findRoomById(app.db, req.params.id)
-      if (!room || room.closed_at !== null) {
-        return reply.code(404).send({ error: 'room_not_found' })
-      }
+      const room = requireOpenRoom(app, req.params.code, reply)
+      if (!room) return reply
 
       if (room.password_hash !== null) {
         const password = req.body.password ?? ''
@@ -94,21 +120,19 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
       }
 
       addMember(app.db, room.id, req.currentUser!.id)
-      return toRoomSummary(findRoomSummary(app.db, room.id)!)
+      return buildRoomState(app.db, room.id)!
     },
   )
 
-  app.post<{ Params: { id: string } }>(
-    '/rooms/:id/leave',
+  app.post<{ Params: { code: string } }>(
+    '/rooms/:code/leave',
     { preHandler: app.requireAuth },
     async (req, reply) => {
-      const room = findRoomById(app.db, req.params.id)
-      if (!room) {
-        return reply.code(404).send({ error: 'room_not_found' })
-      }
+      const room = requireOpenRoom(app, req.params.code, reply)
+      if (!room) return reply
 
       removeMember(app.db, room.id, req.currentUser!.id)
-      return toRoomSummary(findRoomSummary(app.db, room.id)!)
+      return buildRoomState(app.db, room.id)!
     },
   )
 }

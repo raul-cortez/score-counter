@@ -21,13 +21,13 @@ describe('ограничение попыток входа', () => {
       headers: bearer(anya),
       payload: { name: 'Закрытая', password: 'дружеский' },
     })
-    const roomId = room.json().id
+    const roomCode = room.json().room.code
 
     const codes: number[] = []
     for (let attempt = 0; attempt < 12; attempt++) {
       const res = await ctx.app.inject({
         method: 'POST',
-        url: `/api/rooms/${roomId}/join`,
+        url: `/api/rooms/${roomCode}/join`,
         headers: bearer(boris),
         payload: { password: `подбор-${attempt}` },
       })
@@ -47,13 +47,13 @@ describe('ограничение попыток входа', () => {
       headers: bearer(anya),
       payload: { name: 'Закрытая', password: 'дружеский' },
     })
-    const roomId = room.json().id
+    const roomCode = room.json().room.code
 
     let last
     for (let attempt = 0; attempt < 12; attempt++) {
       last = await ctx.app.inject({
         method: 'POST',
-        url: `/api/rooms/${roomId}/join`,
+        url: `/api/rooms/${roomCode}/join`,
         headers: bearer(boris),
         payload: { password: `подбор-${attempt}` },
       })
@@ -85,7 +85,7 @@ describe('ограничение попыток входа', () => {
     for (let attempt = 0; attempt < 12; attempt++) {
       await ctx.app.inject({
         method: 'POST',
-        url: `/api/rooms/${closed.json().id}/join`,
+        url: `/api/rooms/${closed.json().room.code}/join`,
         headers: bearer(boris),
         payload: { password: `подбор-${attempt}` },
       })
@@ -93,7 +93,7 @@ describe('ограничение попыток входа', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${open.json().id}/join`,
+      url: `/api/rooms/${open.json().room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })

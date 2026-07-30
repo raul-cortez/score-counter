@@ -23,20 +23,20 @@ describe('POST /api/rooms', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    const room = res.json()
-    expect(room).toEqual({
+    const state = res.json()
+    expect(state.room).toEqual({
       id: expect.any(String),
       code: expect.stringMatching(/^[A-Z2-9]{6}$/),
       name: 'Вечер преферанса',
       hasPassword: false,
       hostUserId: anya.user.id,
-      memberCount: 1,
-      gameActive: false,
     })
+    expect(state.members).toEqual([{ id: anya.user.id, nickname: 'Аня', hasEmail: false }])
+    expect(state.game).toBeNull()
 
     const membership = ctx.db
       .prepare('SELECT user_id FROM room_members WHERE room_id = ?')
-      .all(room.id)
+      .all(state.room.id)
     expect(membership).toEqual([{ user_id: anya.user.id }])
   })
 
@@ -50,12 +50,12 @@ describe('POST /api/rooms', () => {
       payload: { name: 'Закрытая', password: 'дружеский' },
     })
 
-    expect(res.json().hasPassword).toBe(true)
+    expect(res.json().room.hasPassword).toBe(true)
     expect(res.body).not.toContain('дружеский')
 
     const row = ctx.db
       .prepare('SELECT password_hash FROM rooms WHERE id = ?')
-      .get(res.json().id) as { password_hash: string }
+      .get(res.json().room.id) as { password_hash: string }
     expect(row.password_hash.startsWith('$argon2')).toBe(true)
   })
 
@@ -121,7 +121,7 @@ describe('GET /api/rooms', () => {
     })
     ctx.db
       .prepare('UPDATE rooms SET closed_at = ? WHERE id = ?')
-      .run(Date.now(), created.json().id)
+      .run(Date.now(), created.json().room.id)
 
     const res = await ctx.app.inject({
       method: 'GET',

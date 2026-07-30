@@ -79,14 +79,15 @@ async function playedGame() {
   const anya = await createGuestSession(ctx.app, 'Аня')
   const boris = await createGuestSession(ctx.app, 'Борис')
   const room = await post('/api/rooms', anya.token, { name: 'Вечер преферанса' })
-  await post(`/api/rooms/${room.body.id}/join`, boris.token, {})
-  const game = await post(`/api/rooms/${room.body.id}/games`, anya.token, { scoreLimit: 100 })
-  const added = await post(`/api/games/${game.body.id}/entries`, boris.token, {
+  const roomCode = room.body.room.code
+  await post(`/api/rooms/${roomCode}/join`, boris.token, {})
+  const game = await post(`/api/rooms/${roomCode}/games`, anya.token, { scoreLimit: 100 })
+  const added = await post(`/api/games/${game.body.game.id}/entries`, boris.token, {
     id: randomUUID(),
     userId: boris.user.id,
     points: 12,
   })
-  return { anya, boris, roomId: room.body.id, entryId: added.body.entry.id }
+  return { anya, boris, roomCode, entryId: added.body.entry.id }
 }
 
 /**
@@ -113,9 +114,9 @@ describe('POST без тела с заголовком content-type', () => {
   })
 
   it('позволяет выйти из комнаты', async () => {
-    const { boris, roomId } = await playedGame()
+    const { boris, roomCode } = await playedGame()
 
-    const res = await postEmptyWithLength(`/api/rooms/${roomId}/leave`, boris.token)
+    const res = await postEmptyWithLength(`/api/rooms/${roomCode}/leave`, boris.token)
 
     expect(res.status).toBe(200)
   })
@@ -134,7 +135,7 @@ describe('POST без тела с заголовком content-type', () => {
     const res = await post('/api/rooms', anya.token, { name: 'Обычная' })
 
     expect(res.status).toBe(200)
-    expect(res.body.name).toBe('Обычная')
+    expect(res.body.room.name).toBe('Обычная')
   })
 
   it('отвечает 400 на испорченный JSON, а не падает', async () => {

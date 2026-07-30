@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 async function roomWithTwoPlayers(app: FastifyInstance): Promise<{
-  roomId: string
+  roomCode: string
   anya: Guest
   boris: Guest
 }> {
@@ -32,69 +32,74 @@ async function roomWithTwoPlayers(app: FastifyInstance): Promise<{
     headers: bearer(anya),
     payload: { name: 'Вечер преферанса' },
   })
-  const roomId = created.json().id
+  const roomCode = created.json().room.code
   await app.inject({
     method: 'POST',
-    url: `/api/rooms/${roomId}/join`,
+    url: `/api/rooms/${roomCode}/join`,
     headers: bearer(boris),
     payload: {},
   })
-  return { roomId, anya, boris }
+  return { roomCode, anya, boris }
 }
 
 describe('POST /api/rooms/:id/games', () => {
   it('стартует игру и фиксирует состав из текущих участников', async () => {
-    const { roomId, anya, boris } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya, boris } = await roomWithTwoPlayers(ctx.app)
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
 
     expect(res.statusCode).toBe(200)
-    const game = res.json()
-    expect(game).toEqual({
-      id: expect.any(String),
-      roomId,
-      scoreLimit: 100,
-      status: 'active',
-      startedAt: expect.any(Number),
-      finishedAt: null,
-      winnerUserId: null,
-      // Порядок мест зависит от времени входа, которое здесь совпадает до миллисекунды.
-      playerIds: expect.arrayContaining([anya.user.id, boris.user.id]),
-    })
-    expect(game.playerIds).toHaveLength(2)
+    const state = res.json()
+    expect(state.room.code).toBe(roomCode)
+    expect(state.game).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        scoreLimit: 100,
+        status: 'active',
+        startedAt: expect.any(Number),
+        finishedAt: null,
+        winnerUserId: null,
+      }),
+    )
+    // Порядок мест зависит от времени входа, которое здесь совпадает до миллисекунды.
+    expect(state.game.players.map((p: { id: string }) => p.id).sort()).toEqual(
+      [anya.user.id, boris.user.id].sort(),
+    )
   })
 
   it('выдаёт один и тот же порядок мест при повторных стартах', async () => {
-    const { roomId, anya } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya } = await roomWithTwoPlayers(ctx.app)
     const first = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
-    ctx.db.prepare(`UPDATE games SET status = 'finished' WHERE id = ?`).run(first.json().id)
+    ctx.db.prepare(`UPDATE games SET status = 'finished' WHERE id = ?`).run(first.json().game.id)
 
     const second = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
 
-    expect(second.json().playerIds).toEqual(first.json().playerIds)
+    const seats = (res: { json: () => any }) =>
+      res.json().game.players.map((p: { id: string }) => p.id)
+    expect(seats(second)).toEqual(seats(first))
   })
 
   it('запрещает старт не-хосту', async () => {
-    const { roomId, boris } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, boris } = await roomWithTwoPlayers(ctx.app)
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(boris),
       payload: { scoreLimit: 100 },
     })
@@ -103,17 +108,17 @@ describe('POST /api/rooms/:id/games', () => {
   })
 
   it('запрещает вторую активную игру в комнате', async () => {
-    const { roomId, anya } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya } = await roomWithTwoPlayers(ctx.app)
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
@@ -132,7 +137,7 @@ describe('POST /api/rooms/:id/games', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${created.json().id}/games`,
+      url: `/api/rooms/${created.json().room.code}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
@@ -141,11 +146,11 @@ describe('POST /api/rooms/:id/games', () => {
   })
 
   it('отклоняет лимит вне диапазона', async () => {
-    const { roomId, anya } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya } = await roomWithTwoPlayers(ctx.app)
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 0 },
     })
@@ -154,47 +159,46 @@ describe('POST /api/rooms/:id/games', () => {
   })
 
   it('не включает в состав ушедшего участника', async () => {
-    const { roomId, anya, boris } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya, boris } = await roomWithTwoPlayers(ctx.app)
     const vera = await createGuestSession(ctx.app, 'Вера')
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/join`,
+      url: `/api/rooms/${roomCode}/join`,
       headers: bearer(vera),
       payload: {},
     })
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/leave`,
+      url: `/api/rooms/${roomCode}/leave`,
       headers: bearer(vera),
     })
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
 
-    expect(res.json().playerIds).toEqual(
-      expect.arrayContaining([anya.user.id, boris.user.id]),
+    expect(res.json().game.players.map((p: { id: string }) => p.id).sort()).toEqual(
+      [anya.user.id, boris.user.id].sort(),
     )
-    expect(res.json().playerIds).toHaveLength(2)
   })
 })
 
 describe('GET /api/games/:id', () => {
   it('отдаёт игру со счётом по каждому игроку', async () => {
-    const { roomId, anya, boris } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya, boris } = await roomWithTwoPlayers(ctx.app)
     const started = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
 
     const res = await ctx.app.inject({
       method: 'GET',
-      url: `/api/games/${started.json().id}`,
+      url: `/api/games/${started.json().game.id}`,
       headers: bearer(boris),
     })
 
@@ -204,10 +208,10 @@ describe('GET /api/games/:id', () => {
   })
 
   it('не отдаёт игру постороннему', async () => {
-    const { roomId, anya } = await roomWithTwoPlayers(ctx.app)
+    const { roomCode, anya } = await roomWithTwoPlayers(ctx.app)
     const started = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${roomId}/games`,
+      url: `/api/rooms/${roomCode}/games`,
       headers: bearer(anya),
       payload: { scoreLimit: 100 },
     })
@@ -215,7 +219,7 @@ describe('GET /api/games/:id', () => {
 
     const res = await ctx.app.inject({
       method: 'GET',
-      url: `/api/games/${started.json().id}`,
+      url: `/api/games/${started.json().game.id}`,
       headers: bearer(chuzhoj),
     })
 

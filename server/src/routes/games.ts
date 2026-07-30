@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { canStartGame } from '../domain/permissions.js'
 import { scoreboard } from '../domain/score.js'
-import { findRoomById, listMemberIds, isMember } from '../repo/rooms.js'
+import { findRoomByCode, listMemberIds, isMember } from '../repo/rooms.js'
+import { buildRoomState } from '../state/roomState.js'
 import {
   startGame,
   findActiveGame,
@@ -26,11 +27,11 @@ export const MIN_PLAYERS = 2
 export const MAX_PLAYERS = 10
 
 export default async function gameRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Params: { id: string }; Body: { scoreLimit: number } }>(
-    '/rooms/:id/games',
+  app.post<{ Params: { code: string }; Body: { scoreLimit: number } }>(
+    '/rooms/:code/games',
     { schema: startSchema, preHandler: app.requireAuth },
     async (req, reply) => {
-      const room = findRoomById(app.db, req.params.id)
+      const room = findRoomByCode(app.db, req.params.code.toUpperCase())
       if (!room || room.closed_at !== null) {
         return reply.code(404).send({ error: 'room_not_found' })
       }
@@ -47,8 +48,8 @@ export default async function gameRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'bad_player_count' })
       }
 
-      const game = startGame(app.db, room.id, req.body.scoreLimit, playerIds)
-      return { ...toGame(game), playerIds }
+      startGame(app.db, room.id, req.body.scoreLimit, playerIds)
+      return buildRoomState(app.db, room.id)!
     },
   )
 

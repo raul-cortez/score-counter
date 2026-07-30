@@ -30,10 +30,10 @@ async function createRoom(
     headers: bearer(host),
     payload,
   })
-  return res.json()
+  return res.json().room
 }
 
-describe('POST /api/rooms/:id/join', () => {
+describe('POST /api/rooms/:code/join', () => {
   it('пускает в комнату без пароля', async () => {
     const anya = await createGuestSession(ctx.app, 'Аня')
     const boris = await createGuestSession(ctx.app, 'Борис')
@@ -41,13 +41,13 @@ describe('POST /api/rooms/:id/join', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().memberCount).toBe(2)
+    expect(res.json().members).toHaveLength(2)
   })
 
   it('пускает по верному паролю', async () => {
@@ -57,7 +57,7 @@ describe('POST /api/rooms/:id/join', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: { password: 'дружеский' },
     })
@@ -72,7 +72,7 @@ describe('POST /api/rooms/:id/join', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: { password: 'подобранный' },
     })
@@ -87,7 +87,7 @@ describe('POST /api/rooms/:id/join', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })
@@ -102,18 +102,18 @@ describe('POST /api/rooms/:id/join', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })
 
-    expect(res.json().memberCount).toBe(2)
+    expect(res.json().members).toHaveLength(2)
   })
 
   it('отвечает 404 на несуществующую комнату', async () => {
@@ -121,7 +121,7 @@ describe('POST /api/rooms/:id/join', () => {
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: '/api/rooms/нет-такой/join',
+      url: '/api/rooms/QQQQQQ/join',
       headers: bearer(boris),
       payload: {},
     })
@@ -130,54 +130,25 @@ describe('POST /api/rooms/:id/join', () => {
   })
 })
 
-describe('GET /api/rooms/by-code/:code', () => {
-  it('находит комнату по коду для ссылки-приглашения', async () => {
-    const anya = await createGuestSession(ctx.app, 'Аня')
-    const boris = await createGuestSession(ctx.app, 'Борис')
-    const room = await createRoom(ctx.app, anya, { name: 'Открытая' })
-
-    const res = await ctx.app.inject({
-      method: 'GET',
-      url: `/api/rooms/by-code/${room.code}`,
-      headers: bearer(boris),
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json().id).toBe(room.id)
-  })
-
-  it('отвечает 404 на неизвестный код', async () => {
-    const boris = await createGuestSession(ctx.app, 'Борис')
-
-    const res = await ctx.app.inject({
-      method: 'GET',
-      url: '/api/rooms/by-code/ZZZZZZ',
-      headers: bearer(boris),
-    })
-
-    expect(res.statusCode).toBe(404)
-  })
-})
-
-describe('POST /api/rooms/:id/leave', () => {
+describe('POST /api/rooms/:code/leave', () => {
   it('убирает участника из комнаты', async () => {
     const anya = await createGuestSession(ctx.app, 'Аня')
     const boris = await createGuestSession(ctx.app, 'Борис')
     const room = await createRoom(ctx.app, anya, { name: 'Открытая' })
     await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/join`,
+      url: `/api/rooms/${room.code}/join`,
       headers: bearer(boris),
       payload: {},
     })
 
     const res = await ctx.app.inject({
       method: 'POST',
-      url: `/api/rooms/${room.id}/leave`,
+      url: `/api/rooms/${room.code}/leave`,
       headers: bearer(boris),
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().memberCount).toBe(1)
+    expect(res.json().members).toHaveLength(1)
   })
 })

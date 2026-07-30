@@ -31,20 +31,20 @@ async function tableOfTwo(app: FastifyInstance, scoreLimit = 100): Promise<Table
     headers: bearer(anya),
     payload: { name: 'Вечер преферанса' },
   })
-  const roomId = room.json().id
+  const roomCode = room.json().room.code
   await app.inject({
     method: 'POST',
-    url: `/api/rooms/${roomId}/join`,
+    url: `/api/rooms/${roomCode}/join`,
     headers: bearer(boris),
     payload: {},
   })
   const game = await app.inject({
     method: 'POST',
-    url: `/api/rooms/${roomId}/games`,
+    url: `/api/rooms/${roomCode}/games`,
     headers: bearer(anya),
     payload: { scoreLimit },
   })
-  return { gameId: game.json().id, anya, boris }
+  return { gameId: game.json().game.id, anya, boris }
 }
 
 async function addEntry(
