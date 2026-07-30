@@ -10,6 +10,29 @@ import entryRoutes from './routes/entries.js'
 export function buildApp(db: Db): FastifyInstance {
   const app = Fastify({ logger: false })
 
+  // Часть маршрутов не принимает тело, но клиенты обычно ставят этот заголовок на
+  // каждый POST через общую обёртку. Штатный разбор Fastify отвечает на пустое тело
+  // ошибкой 400 — считаем его отсутствующим, чтобы ответ не зависел от заголовка.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      if (body === '') {
+        done(null, undefined)
+        return
+      }
+      try {
+        done(null, JSON.parse(body as string))
+      } catch {
+        const err = new Error('тело запроса не является корректным JSON') as Error & {
+          statusCode: number
+        }
+        err.statusCode = 400
+        done(err)
+      }
+    },
+  )
+
   app.decorate('db', db)
   // global: false — ограничения включаются точечно там, где они нужны.
   app.register(rateLimit, { global: false })
