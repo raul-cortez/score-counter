@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify'
-import { canAddEntryFor } from '../domain/permissions.js'
+import { canAddEntryFor, canVoidEntry } from '../domain/permissions.js'
 import { scoreboard } from '../domain/score.js'
 import { findRoomById } from '../repo/rooms.js'
 import { findGameById, listGamePlayerIds } from '../repo/games.js'
-import { listEntries, findEntryByClientId, insertEntry } from '../repo/entries.js'
+import { listEntries, findEntryByClientId, insertEntry, voidEntry } from '../repo/entries.js'
 
 const addEntrySchema = {
   body: {
@@ -55,6 +55,31 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
 
       const entries = listEntries(app.db, game.id)
       return { entry, scores: scoreboard(entries, playerIds) }
+    },
+  )
+
+  app.post<{ Params: { id: string } }>(
+    '/entries/:id/void',
+    { preHandler: app.requireAuth },
+    async (req, reply) => {
+      const entry = findEntryByClientId(app.db, req.params.id)
+      if (!entry) {
+        return reply.code(404).send({ error: 'entry_not_found' })
+      }
+
+      const game = findGameById(app.db, entry.gameId)!
+      const room = findRoomById(app.db, game.room_id)!
+      const playerIds = listGamePlayerIds(app.db, game.id)
+      const ctx = { actorId: req.currentUser!.id, hostId: room.host_user_id, playerIds }
+
+      if (!canVoidEntry(ctx, entry.userId)) {
+        return reply.code(403).send({ error: 'not_allowed' })
+      }
+
+      voidEntry(app.db, entry.id, req.currentUser!.id)
+
+      const entries = listEntries(app.db, game.id)
+      return { scores: scoreboard(entries, playerIds) }
     },
   )
 }
