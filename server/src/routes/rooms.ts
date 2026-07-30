@@ -66,7 +66,20 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string }; Body: { password?: string } }>(
     '/rooms/:id/join',
-    { schema: joinSchema, preHandler: app.requireAuth },
+    {
+      schema: joinSchema,
+      preHandler: app.requireAuth,
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '5 minutes',
+          // Ключ по паре «клиент + комната»: подбор пароля к одной комнате
+          // не должен закрывать вход в остальные.
+          keyGenerator: (req: { ip: string; params: unknown }) =>
+            `${req.ip}:${(req.params as { id: string }).id}`,
+        },
+      },
+    },
     async (req, reply) => {
       const room = findRoomById(app.db, req.params.id)
       if (!room || room.closed_at !== null) {
