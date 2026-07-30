@@ -1,4 +1,5 @@
 import fp from 'fastify-plugin'
+import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify'
 
 /**
  * Приводит все ошибки к виду { error, message }.
@@ -9,7 +10,7 @@ export default fp(async (app) => {
     await reply.code(404).send({ error: 'not_found', message: 'маршрут не найден' })
   })
 
-  app.setErrorHandler(async (err, req, reply) => {
+  app.setErrorHandler(async (err: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
     const status = err.statusCode ?? 500
 
     // Ошибку могли оформить до нас — например, ограничитель частоты запросов.

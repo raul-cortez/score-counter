@@ -23,8 +23,36 @@ export type RoomSummary = {
   code: string
   name: string
   hasPassword: boolean
+  hostUserId: string
   memberCount: number
   gameActive: boolean
+}
+
+export type RoomInfo = {
+  id: string
+  code: string
+  name: string
+  hasPassword: boolean
+  hostUserId: string
+}
+
+export type GameDetails = {
+  id: string
+  scoreLimit: number
+  status: GameStatus
+  startedAt: number
+  finishedAt: number | null
+  winnerUserId: string | null
+  players: PublicUser[]
+  entries: ScoreEntry[]
+  scores: Record<string, number>
+}
+
+/** Всё, что нужно, чтобы отрисовать экран комнаты целиком. */
+export type RoomState = {
+  room: RoomInfo
+  members: PublicUser[]
+  game: GameDetails | null
 }
 
 export type Game = {

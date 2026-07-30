@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Game } from '@score/shared'
 import type { Db } from '../db/index.js'
+import type { UserRow } from './users.js'
 
 export type GameRow = {
   id: string
@@ -34,6 +35,26 @@ export function findActiveGame(db: Db, roomId: string): GameRow | null {
       .prepare(`SELECT * FROM games WHERE room_id = ? AND status = 'active'`)
       .get(roomId) as GameRow | undefined) ?? null
   )
+}
+
+/** Последняя начатая игра комнаты в любом статусе: экран победы переживает перезагрузку. */
+export function findLatestGame(db: Db, roomId: string): GameRow | null {
+  return (
+    (db
+      .prepare('SELECT * FROM games WHERE room_id = ? ORDER BY started_at DESC, id DESC LIMIT 1')
+      .get(roomId) as GameRow | undefined) ?? null
+  )
+}
+
+export function listGamePlayers(db: Db, gameId: string): UserRow[] {
+  return db
+    .prepare(
+      `SELECT users.* FROM game_players
+       JOIN users ON users.id = game_players.user_id
+       WHERE game_players.game_id = ?
+       ORDER BY game_players.seat`,
+    )
+    .all(gameId) as UserRow[]
 }
 
 export function listGamePlayerIds(db: Db, gameId: string): string[] {

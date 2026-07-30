@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { RoomSummary } from '@score/shared'
 import type { Db } from '../db/index.js'
 import { generateRoomCode } from '../domain/code.js'
+import type { UserRow } from './users.js'
 
 export type RoomRow = {
   id: string
@@ -21,6 +22,7 @@ export function toRoomSummary(row: RoomWithCounts): RoomSummary {
     code: row.code,
     name: row.name,
     hasPassword: row.password_hash !== null,
+    hostUserId: row.host_user_id,
     memberCount: row.member_count,
     gameActive: row.active_games > 0,
   }
@@ -123,6 +125,18 @@ export function listMemberIds(db: Db, roomId: string): string[] {
       )
       .all(roomId) as { user_id: string }[]
   ).map((row) => row.user_id)
+}
+
+/** Порядок тот же, что у listMemberIds: места за столом обязаны быть устойчивыми. */
+export function listMembers(db: Db, roomId: string): UserRow[] {
+  return db
+    .prepare(
+      `SELECT users.* FROM room_members
+       JOIN users ON users.id = room_members.user_id
+       WHERE room_members.room_id = ? AND room_members.left_at IS NULL
+       ORDER BY room_members.joined_at, users.id`,
+    )
+    .all(roomId) as UserRow[]
 }
 
 export function isMember(db: Db, roomId: string, userId: string): boolean {

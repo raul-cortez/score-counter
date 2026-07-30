@@ -29,6 +29,7 @@ describe('POST /api/rooms', () => {
       code: expect.stringMatching(/^[A-Z2-9]{6}$/),
       name: 'Вечер преферанса',
       hasPassword: false,
+      hostUserId: anya.user.id,
       memberCount: 1,
       gameActive: false,
     })
