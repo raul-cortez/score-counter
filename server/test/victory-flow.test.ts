@@ -47,12 +47,19 @@ async function tableOfTwo(app: FastifyInstance, scoreLimit: number): Promise<Tab
   return { roomCode, gameId: game.json().game.id, anya, boris }
 }
 
-function addEntry(app: FastifyInstance, gameId: string, actor: Guest, points: number) {
+/** Идентификатор записи придумывает клиент, поэтому его можно задать заранее. */
+function addEntry(
+  app: FastifyInstance,
+  gameId: string,
+  actor: Guest,
+  points: number,
+  entryId: string = randomUUID(),
+) {
   return app.inject({
     method: 'POST',
     url: `/api/games/${gameId}/entries`,
     headers: bearer(actor),
-    payload: { id: randomUUID(), userId: actor.user.id, points },
+    payload: { id: entryId, userId: actor.user.id, points },
   })
 }
 
@@ -92,8 +99,8 @@ describe('завершение игры', () => {
 
   it('возвращает игру в активное состояние, если победная запись отменена', async () => {
     const { gameId, boris } = await tableOfTwo(ctx.app, 50)
-    const winning = await addEntry(ctx.app, gameId, boris, 50)
-    const entryId = winning.json().entry.id
+    const entryId = randomUUID()
+    await addEntry(ctx.app, gameId, boris, 50, entryId)
 
     const res = await ctx.app.inject({
       method: 'POST',

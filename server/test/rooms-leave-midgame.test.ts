@@ -51,11 +51,13 @@ describe('выход из комнаты во время игры', () => {
 
     const res = await ctx.app.inject({
       method: 'GET',
-      url: `/api/games/${gameId}`,
+      url: `/api/rooms/${roomCode}/state`,
       headers: bearer(anya),
     })
-    expect(res.json().playerIds).toContain(boris.user.id)
-    expect(res.json().scores[boris.user.id]).toBe(30)
+    // Из комнаты ушёл, из состава игры — нет: очки и место остаются за ним.
+    expect(res.json().members.map((m: { id: string }) => m.id)).not.toContain(boris.user.id)
+    expect(res.json().game.players.map((p: { id: string }) => p.id)).toContain(boris.user.id)
+    expect(res.json().game.scores[boris.user.id]).toBe(30)
   })
 
   it('позволяет вернувшемуся игроку снова писать очки', async () => {
@@ -100,6 +102,6 @@ describe('выход из комнаты во время игры', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().scores[boris.user.id]).toBe(10)
+    expect(res.json().game.scores[boris.user.id]).toBe(10)
   })
 })

@@ -82,12 +82,14 @@ async function playedGame() {
   const roomCode = room.body.room.code
   await post(`/api/rooms/${roomCode}/join`, boris.token, {})
   const game = await post(`/api/rooms/${roomCode}/games`, anya.token, { scoreLimit: 100 })
-  const added = await post(`/api/games/${game.body.game.id}/entries`, boris.token, {
-    id: randomUUID(),
+  // Идентификатор записи придумывает клиент — читать его из ответа незачем.
+  const entryId = randomUUID()
+  await post(`/api/games/${game.body.game.id}/entries`, boris.token, {
+    id: entryId,
     userId: boris.user.id,
     points: 12,
   })
-  return { anya, boris, roomCode, entryId: added.body.entry.id }
+  return { anya, boris, roomCode, entryId }
 }
 
 /**
@@ -101,7 +103,7 @@ describe('POST без тела с заголовком content-type', () => {
     const res = await postEmptyWithLength(`/api/entries/${entryId}/void`, boris.token)
 
     expect(res.status).toBe(200)
-    expect(res.body.scores[boris.user.id]).toBe(0)
+    expect(res.body.game.scores[boris.user.id]).toBe(0)
   })
 
   it('позволяет отменить запись без Content-Length', async () => {
@@ -110,7 +112,7 @@ describe('POST без тела с заголовком content-type', () => {
     const res = await postEmptyNoLength(`/api/entries/${entryId}/void`, boris.token)
 
     expect(res.status).toBe(200)
-    expect(res.body.scores[boris.user.id]).toBe(0)
+    expect(res.body.game.scores[boris.user.id]).toBe(0)
   })
 
   it('позволяет выйти из комнаты', async () => {

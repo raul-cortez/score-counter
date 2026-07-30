@@ -54,13 +54,15 @@ async function addEntry(
   userId: string,
   points: number,
 ): Promise<string> {
-  const res = await app.inject({
+  // Идентификатор записи придумывает клиент — читать его из ответа незачем.
+  const entryId = randomUUID()
+  await app.inject({
     method: 'POST',
     url: `/api/games/${gameId}/entries`,
     headers: bearer(actor),
-    payload: { id: randomUUID(), userId, points },
+    payload: { id: entryId, userId, points },
   })
-  return res.json().entry.id
+  return entryId
 }
 
 describe('POST /api/entries/:id/void', () => {
@@ -75,7 +77,7 @@ describe('POST /api/entries/:id/void', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().scores[boris.user.id]).toBe(0)
+    expect(res.json().game.scores[boris.user.id]).toBe(0)
   })
 
   it('сохраняет отменённую запись в журнале', async () => {
@@ -119,7 +121,7 @@ describe('POST /api/entries/:id/void', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().scores[boris.user.id]).toBe(0)
+    expect(res.json().game.scores[boris.user.id]).toBe(0)
   })
 
   it('повторная отмена не меняет автора и время отмены', async () => {

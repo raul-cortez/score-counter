@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify'
 import { canAddEntryFor, canVoidEntry } from '../domain/permissions.js'
-import { scoreboard } from '../domain/score.js'
 import { findWinner } from '../domain/victory.js'
 import { findRoomById } from '../repo/rooms.js'
 import {
@@ -8,15 +7,10 @@ import {
   listGamePlayerIds,
   finishGame,
   reopenGame,
-  toGame,
   type GameRow,
 } from '../repo/games.js'
-import {
-  listEntries,
-  findEntryByClientId,
-  insertEntry,
-  voidEntry,
-} from '../repo/entries.js'
+import { listEntries, findEntryByClientId, insertEntry, voidEntry } from '../repo/entries.js'
+import { buildRoomState } from '../state/roomState.js'
 import type { Db } from '../db/index.js'
 
 const addEntrySchema = {
@@ -39,7 +33,7 @@ type AddEntryBody = { id: string; userId: string; points: number }
  * Вызывается внутри той же транзакции, что и изменение журнала, — иначе два
  * почти одновременных запроса могут объявить двух победителей.
  */
-function settleGame(db: Db, game: GameRow, playerIds: string[]): GameRow {
+function settleGame(db: Db, game: GameRow, playerIds: string[]): void {
   const winner = findWinner(listEntries(db, game.id), playerIds, game.score_limit)
 
   if (winner && game.status === 'active') {
@@ -47,8 +41,6 @@ function settleGame(db: Db, game: GameRow, playerIds: string[]): GameRow {
   } else if (!winner && game.status === 'finished') {
     reopenGame(db, game.id)
   }
-
-  return findGameById(db, game.id)!
 }
 
 export default async function entryRoutes(app: FastifyInstance): Promise<void> {
@@ -72,11 +64,9 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'not_allowed' })
       }
 
-      const result = app.db.transaction(() => {
-        // Повтор того же запроса возвращает уже созданную запись, а не создаёт вторую.
-        const existing = findEntryByClientId(app.db, req.body.id)
-        const entry =
-          existing ??
+      app.db.transaction(() => {
+        // Повтор того же запроса не создаёт вторую запись.
+        if (findEntryByClientId(app.db, req.body.id) === null) {
           insertEntry(app.db, {
             id: req.body.id,
             gameId: game.id,
@@ -84,16 +74,11 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
             points: req.body.points,
             createdBy: req.currentUser!.id,
           })
-
-        const settled = settleGame(app.db, game, playerIds)
-        return { entry, settled }
+        }
+        settleGame(app.db, game, playerIds)
       })()
 
-      return {
-        entry: result.entry,
-        game: toGame(result.settled),
-        scores: scoreboard(listEntries(app.db, game.id), playerIds),
-      }
+      return buildRoomState(app.db, game.room_id)!
     },
   )
 
@@ -115,15 +100,12 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'not_allowed' })
       }
 
-      const settled = app.db.transaction(() => {
+      app.db.transaction(() => {
         voidEntry(app.db, entry.id, req.currentUser!.id)
-        return settleGame(app.db, game, playerIds)
+        settleGame(app.db, game, playerIds)
       })()
 
-      return {
-        game: toGame(settled),
-        scores: scoreboard(listEntries(app.db, game.id), playerIds),
-      }
+      return buildRoomState(app.db, game.room_id)!
     },
   )
 }

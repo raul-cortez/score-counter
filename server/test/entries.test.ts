@@ -50,27 +50,30 @@ async function tableOfTwo(app: FastifyInstance, scoreLimit = 100): Promise<Table
 describe('POST /api/games/:id/entries', () => {
   it('записывает очки себе', async () => {
     const { gameId, boris } = await tableOfTwo(ctx.app)
+    const entryId = randomUUID()
 
     const res = await ctx.app.inject({
       method: 'POST',
       url: `/api/games/${gameId}/entries`,
       headers: bearer(boris),
-      payload: { id: randomUUID(), userId: boris.user.id, points: 12 },
+      payload: { id: entryId, userId: boris.user.id, points: 12 },
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().entry).toEqual({
-      seq: expect.any(Number),
-      id: expect.any(String),
-      gameId,
-      userId: boris.user.id,
-      points: 12,
-      createdBy: boris.user.id,
-      createdAt: expect.any(Number),
-      voidedAt: null,
-      voidedBy: null,
-    })
-    expect(res.json().scores[boris.user.id]).toBe(12)
+    expect(res.json().game.entries).toEqual([
+      {
+        seq: expect.any(Number),
+        id: entryId,
+        gameId,
+        userId: boris.user.id,
+        points: 12,
+        createdBy: boris.user.id,
+        createdAt: expect.any(Number),
+        voidedAt: null,
+        voidedBy: null,
+      },
+    ])
+    expect(res.json().game.scores[boris.user.id]).toBe(12)
   })
 
   it('повторный запрос с тем же id не добавляет вторую запись', async () => {
@@ -92,7 +95,7 @@ describe('POST /api/games/:id/entries', () => {
     })
 
     expect(second.statusCode).toBe(200)
-    expect(second.json().scores[boris.user.id]).toBe(12)
+    expect(second.json().game.scores[boris.user.id]).toBe(12)
     const count = ctx.db
       .prepare('SELECT COUNT(*) AS n FROM score_entries WHERE game_id = ?')
       .get(gameId) as { n: number }
@@ -115,7 +118,7 @@ describe('POST /api/games/:id/entries', () => {
       payload: { id: randomUUID(), userId: boris.user.id, points: -5 },
     })
 
-    expect(res.json().scores[boris.user.id]).toBe(15)
+    expect(res.json().game.scores[boris.user.id]).toBe(15)
   })
 
   it('отклоняет ноль очков', async () => {
@@ -155,8 +158,9 @@ describe('POST /api/games/:id/entries', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().entry.createdBy).toBe(anya.user.id)
-    expect(res.json().entry.userId).toBe(boris.user.id)
+    const [entry] = res.json().game.entries
+    expect(entry.createdBy).toBe(anya.user.id)
+    expect(entry.userId).toBe(boris.user.id)
   })
 
   it('запрещает запись постороннему', async () => {
