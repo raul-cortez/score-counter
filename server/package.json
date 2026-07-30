@@ -14,7 +14,6 @@
   "dependencies": {
     "@node-rs/argon2": "^2.0.0",
     "@score/shared": "workspace:*",
-    "ajv-formats": "^3.0.1",
     "better-sqlite3": "^11.5.0",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1"

@@ -19,13 +19,20 @@ const guestSchema = {
   },
 }
 
+/**
+ * Проверка адреса намеренно минимальная: «что-то, собака, что-то, точка, что-то».
+ * Строгие регулярные выражения для email отвергают действительные адреса чаще,
+ * чем ловят опечатки, а подтверждения почты у нас пока нет.
+ */
+const EMAIL_PATTERN = '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$'
+
 const credentialsSchema = {
   body: {
     type: 'object',
     required: ['email', 'password'],
     additionalProperties: false,
     properties: {
-      email: { type: 'string', format: 'email', maxLength: 200 },
+      email: { type: 'string', pattern: EMAIL_PATTERN, maxLength: 200 },
       password: { type: 'string', minLength: 8, maxLength: 200 },
     },
   },

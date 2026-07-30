@@ -1,5 +1,4 @@
 import Fastify, { type FastifyInstance } from 'fastify'
-import addFormats from 'ajv-formats'
 import type { Db } from './db/index.js'
 import authPlugin from './plugins/auth.js'
 import authRoutes from './routes/auth.js'
@@ -8,10 +7,7 @@ import gameRoutes from './routes/games.js'
 import entryRoutes from './routes/entries.js'
 
 export function buildApp(db: Db): FastifyInstance {
-  const app = Fastify({
-    logger: false,
-    ajv: { plugins: [addFormats] },
-  })
+  const app = Fastify({ logger: false })
 
   app.decorate('db', db)
   app.register(authPlugin)
