@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Player, GameState } from './types'
 import SetupScreen from './components/SetupScreen.vue'
 import GameScreen from './components/GameScreen.vue'
