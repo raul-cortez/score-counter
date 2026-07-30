@@ -83,11 +83,13 @@ room_members   room_id, user_id, joined_at, left_at?
 games          id, room_id, score_limit, status, started_at, finished_at?, winner_user_id?
 game_players   game_id, user_id, seat
 
-score_entries  id, game_id, user_id, points, created_by,
+score_entries  seq, id, game_id, user_id, points, created_by,
                created_at, voided_at?, voided_by?
 
 room_events    seq, room_id, type, payload, created_at
 ```
+
+У `score_entries` два ключа с разными задачами: `seq` — автоинкремент, задающий бесспорный порядок записей внутри игры; `id` — уникальный идентификатор, который генерирует клиент ради идемпотентности. Порядок нужен для правила «кто первым перешёл лимит», и брать его из `room_events` значило бы завязать подсчёт очков на транспортный журнал.
 
 `games.status` ∈ `active | finished | abandoned`.
 
