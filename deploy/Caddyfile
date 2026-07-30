@@ -1,0 +1,34 @@
+# Caddy сам получает и продлевает сертификат для {$DOMAIN}.
+#
+# Адрес для писем Let's Encrypt намеренно не указан: с пустой переменной
+# директива email ломает разбор конфига, а без неё всё работает — продление
+# идёт автоматически. Если нужны письма об истечении, добавьте в начало файла
+# блок { email вы@почта } с настоящим адресом.
+
+{$DOMAIN} {
+	reverse_proxy score-app:3000 {
+		# Без этого поток событий копится в буфере и обновления приходят
+		# пачками через минуты. Выглядит как «приложение тормозит».
+		flush_interval -1
+	}
+
+	# Сжимаем только перечисленное. Список именно разрешительный: text/event-stream
+	# сжимать нельзя — буфер компрессора задержит кадры до его заполнения.
+	encode {
+		gzip
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type application/manifest+json*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
