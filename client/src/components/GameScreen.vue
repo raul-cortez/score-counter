@@ -1,68 +1,79 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
-import type { Player } from '../types'
+import { computed, nextTick, ref } from 'vue'
+import type { GameDetails, RoomState } from '@score/shared'
 import PlayerCard from './PlayerCard.vue'
 
-defineProps<{
-  players: Player[]
-  scoreLimit: number
+const props = defineProps<{
+  state: RoomState
+  game: GameDetails
+  meId: string
+  busy: boolean
 }>()
 
-const emit = defineEmits<{
-  addScore: [playerId: number, points: number]
-  reset: []
-  newGame: []
-}>()
+const emit = defineEmits<{ addPoints: [userId: string, points: number] }>()
 
-const selectedPlayerId = ref<number | null>(null)
+const selectedId = ref<string | null>(null)
 const pointsInput = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 
-const selectPlayer = async (playerId: number) => {
-  if (selectedPlayerId.value === playerId) {
-    selectedPlayerId.value = null
-  } else {
-    selectedPlayerId.value = playerId
-    pointsInput.value = ''
-    await nextTick()
-    inputRef.value?.focus()
-  }
+const isHost = computed(() => props.meId === props.state.room.hostUserId)
+
+/** Себе — всегда, другому — только хост. Те же правила, что и на сервере. */
+function mayWriteFor(userId: string): boolean {
+  if (!props.game.players.some((player) => player.id === props.meId)) return false
+  return userId === props.meId || isHost.value
 }
 
-const addPoints = () => {
-  const points = parseInt(pointsInput.value)
-  if (selectedPlayerId.value !== null && !isNaN(points) && points > 0) {
-    emit('addScore', selectedPlayerId.value, points)
-    pointsInput.value = ''
-    selectedPlayerId.value = null
+const selectedName = computed(
+  () => props.game.players.find((player) => player.id === selectedId.value)?.nickname ?? '',
+)
+
+async function select(userId: string): Promise<void> {
+  if (!mayWriteFor(userId)) return
+
+  if (selectedId.value === userId) {
+    selectedId.value = null
+    return
   }
+  selectedId.value = userId
+  pointsInput.value = ''
+  await nextTick()
+  inputRef.value?.focus()
 }
 
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter') {
-    addPoints()
-  }
+function submit(): void {
+  const points = Number.parseInt(pointsInput.value, 10)
+  if (selectedId.value === null || Number.isNaN(points) || points < 1 || props.busy) return
+
+  emit('addPoints', selectedId.value, points)
+  pointsInput.value = ''
+  selectedId.value = null
 }
 </script>
 
 <template>
   <div class="game-root">
     <div class="header">
-      <span class="limit-info">Играем до {{ scoreLimit }}</span>
+      <span class="limit-info">Играем до {{ game.scoreLimit }}</span>
     </div>
 
     <div class="cards">
       <PlayerCard
-        v-for="player in players"
+        v-for="player in game.players"
         :key="player.id"
         :player="player"
-        :score-limit="scoreLimit"
-        :selected="selectedPlayerId === player.id"
-        @select="selectPlayer(player.id)"
+        :score="game.scores[player.id] ?? 0"
+        :score-limit="game.scoreLimit"
+        :selected="selectedId === player.id"
+        :online="state.online.includes(player.id)"
+        :is-you="player.id === meId"
+        :is-host="player.id === state.room.hostUserId"
+        @select="select(player.id)"
       />
     </div>
 
-    <div class="controls" v-if="selectedPlayerId !== null">
+    <div v-if="selectedId !== null" class="controls">
+      <span class="for-whom">{{ selectedName }}</span>
       <input
         ref="inputRef"
         v-model="pointsInput"
@@ -70,32 +81,21 @@ const handleKeydown = (e: KeyboardEvent) => {
         class="points-input"
         placeholder="Очки"
         min="1"
-        @keydown="handleKeydown"
+        @keydown.enter="submit"
       />
-      <button class="btn-add" @click="addPoints" :disabled="!pointsInput">
-        Добавить
-      </button>
+      <button class="btn-add" :disabled="!pointsInput || busy" @click="submit">Добавить</button>
     </div>
-
-    <div class="actions">
-      <button class="btn-reset" @click="emit('reset')">
-        Сбросить очки
-      </button>
-      <button class="btn-new" @click="emit('newGame')">
-        Новая игра
-      </button>
-    </div>
+    <p v-else class="pick-hint">
+      {{ isHost ? 'Нажмите на игрока, чтобы записать очки' : 'Нажмите на себя, чтобы записать очки' }}
+    </p>
   </div>
 </template>
 
 <style scoped lang="scss">
 .game-root {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  max-width: 800px;
-  margin: 0 auto;
+  gap: 16px;
   width: 100%;
 }
 
@@ -124,6 +124,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 .controls {
   display: flex;
+  align-items: center;
   gap: 12px;
   position: sticky;
   bottom: 20px;
@@ -131,10 +132,17 @@ const handleKeydown = (e: KeyboardEvent) => {
   padding: 16px;
   border-radius: 12px;
   box-shadow: 0 4px 20px var(--shadow);
+  z-index: 10;
+}
+
+.for-whom {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .points-input {
   flex: 1;
+  min-width: 0;
   padding: 12px 16px;
   border: 2px solid var(--border);
   border-radius: 8px;
@@ -164,7 +172,6 @@ const handleKeydown = (e: KeyboardEvent) => {
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
   white-space: nowrap;
 
   &:hover:not(:disabled) {
@@ -177,27 +184,9 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-.actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.btn-reset,
-.btn-new {
-  padding: 12px 24px;
-  background: transparent;
+.pick-hint {
+  text-align: center;
   color: var(--text-hint);
-  border: 2px solid var(--border);
-  border-radius: 8px;
   font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-
-  &:hover {
-    border-color: var(--border-hover);
-    color: var(--text-muted);
-  }
 }
 </style>

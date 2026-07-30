@@ -1,115 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import type { Player, GameState } from './types'
-import SetupScreen from './components/SetupScreen.vue'
-import GameScreen from './components/GameScreen.vue'
-import VictoryScreen from './components/VictoryScreen.vue'
+import { onMounted } from 'vue'
+import { useTheme } from './composables/useTheme.js'
 
-const STORAGE_KEY = 'score-counter-game'
+const { isDark, toggleTheme, restoreTheme } = useTheme()
 
-const players = ref<Player[]>([])
-const scoreLimit = ref(100)
-const gameStarted = ref(false)
-const isDark = ref(false)
-
-const winner = computed(() => {
-  if (!gameStarted.value || scoreLimit.value <= 0) return null
-  return players.value.find(p => p.score >= scoreLimit.value) || null
-})
-
-const saveGame = () => {
-  const state: GameState = {
-    players: players.value,
-    scoreLimit: scoreLimit.value,
-    gameStarted: gameStarted.value
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-}
-
-const loadGame = () => {
-  const saved = localStorage.getItem(STORAGE_KEY)
-  if (saved) {
-    try {
-      const state: GameState = JSON.parse(saved)
-      players.value = state.players
-      scoreLimit.value = state.scoreLimit
-      gameStarted.value = state.gameStarted
-    } catch (e) {
-      console.error('Failed to load game state')
-    }
-  }
-}
-
-const clearGame = () => {
-  localStorage.removeItem(STORAGE_KEY)
-}
-
-const startGame = (newPlayers: Player[], limit: number) => {
-  clearGame()
-  players.value = newPlayers
-  scoreLimit.value = limit
-  gameStarted.value = true
-  saveGame()
-}
-
-const resetScores = () => {
-  players.value.forEach(p => p.score = 0)
-  saveGame()
-}
-
-const addScore = (playerId: number, points: number) => {
-  const player = players.value.find(p => p.id === playerId)
-  if (player) {
-    player.score += points
-    saveGame()
-  }
-}
-
-const newGame = () => {
-  clearGame()
-  players.value = []
-  gameStarted.value = false
-}
-
-const toggleTheme = () => {
-  isDark.value = !isDark.value
-  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
-  localStorage.setItem('score-counter-theme', isDark.value ? 'dark' : 'light')
-}
-
-onMounted(() => {
-  const savedTheme = localStorage.getItem('score-counter-theme')
-  if (savedTheme === 'dark') {
-    isDark.value = true
-    document.documentElement.setAttribute('data-theme', 'dark')
-  }
-  loadGame()
-})
+onMounted(restoreTheme)
 </script>
 
 <template>
   <div class="app-root">
-    <button class="theme-toggle" @click="toggleTheme">
+    <button class="theme-toggle" :title="isDark ? 'Светлая тема' : 'Тёмная тема'" @click="toggleTheme">
       {{ isDark ? '☀️' : '🌙' }}
     </button>
 
-    <VictoryScreen
-      v-if="winner"
-      :winner="winner"
-      @new-game="newGame"
-    />
-    <SetupScreen
-      v-else-if="!gameStarted"
-      @start="startGame"
-    />
-    <GameScreen
-      v-else
-      :players="players"
-      :score-limit="scoreLimit"
-      @add-score="addScore"
-      @reset="resetScores"
-      @new-game="newGame"
-    />
+    <RouterView />
   </div>
 </template>
 

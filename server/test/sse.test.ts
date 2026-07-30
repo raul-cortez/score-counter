@@ -181,6 +181,38 @@ describe('поток событий на живом сокете', () => {
     expect(missed.data.events.every((event: any) => event.seq > точкаОбрыва)).toBe(true)
   })
 
+  // Клиент переподключается сам и заголовки выставить не может — только параметр.
+  it('принимает точку догрузки параметром запроса, а не только заголовком', async () => {
+    const { anya, boris, code } = await table()
+    const started = (await api(`/rooms/${code}/games`, anya.token, { scoreLimit: 100 })) as RoomState
+
+    const первое = await subscribe(code, boris)
+    const точкаОбрыва = (await первое.waitFor((frame) => frame.event === 'sync')).id!
+    первое.close()
+
+    await api(`/games/${started.game!.id}/entries`, anya.token, {
+      id: randomUUID(),
+      userId: anya.id,
+      points: 15,
+    })
+
+    const { ticket } = (await (
+      await fetch(`${live.baseUrl}/api/rooms/${code}/events/ticket`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${boris.token}` },
+      })
+    ).json()) as { ticket: string }
+
+    const res = await fetch(
+      `${live.baseUrl}/api/rooms/${code}/events?ticket=${ticket}&lastEventId=${точкаОбрыва}`,
+    )
+    const text = await res.body!.getReader().read()
+    const chunk = new TextDecoder().decode(text.value)
+
+    expect(chunk).toContain('event: missed')
+    await res.body!.cancel().catch(() => undefined)
+  })
+
   it('не шлёт кадр missed, когда клиент ничего не пропустил', async () => {
     const { anya, code } = await table()
     const первое = await subscribe(code, anya)

@@ -1,32 +1,39 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Player } from '../types'
+import type { PublicUser } from '@score/shared'
 
 const props = defineProps<{
-  player: Player
+  player: PublicUser
+  score: number
   scoreLimit: number
   selected: boolean
+  online: boolean
+  isYou: boolean
+  isHost: boolean
 }>()
 
-const emit = defineEmits<{
-  select: []
-}>()
+defineEmits<{ select: [] }>()
 
 const progress = computed(() => {
   if (props.scoreLimit <= 0) return 0
-  return Math.min(100, (props.player.score / props.scoreLimit) * 100)
+  return Math.min(100, Math.max(0, (props.score / props.scoreLimit) * 100))
 })
 </script>
 
 <template>
-  <div
-    class="card-root"
-    :class="{ selected }"
-    @click="emit('select')"
-  >
+  <div class="card-root" :class="{ selected, offline: !online }" @click="$emit('select')">
     <div class="progress-bar" :style="{ height: `${progress}%` }" />
-    <span class="name">{{ player.name }}</span>
-    <span class="score">{{ player.score }}</span>
+
+    <span class="badges">
+      <span v-if="isHost" class="badge" title="Хост">👑</span>
+      <span class="dot" :class="{ on: online }" :title="online ? 'В сети' : 'Не в сети'" />
+    </span>
+
+    <span class="name">
+      {{ player.nickname }}
+      <span v-if="isYou" class="you">вы</span>
+    </span>
+    <span class="score">{{ score }}</span>
   </div>
 </template>
 
@@ -54,6 +61,10 @@ const progress = computed(() => {
   &.selected {
     border-color: var(--btn-bg);
   }
+
+  &.offline {
+    opacity: 0.6;
+  }
 }
 
 .progress-bar {
@@ -66,6 +77,27 @@ const progress = computed(() => {
   transition: height 0.3s ease-out;
 }
 
+.badges {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+
+  &.on {
+    background: #4caf50;
+  }
+}
+
 .name {
   font-size: 16px;
   font-weight: 500;
@@ -73,6 +105,17 @@ const progress = computed(() => {
   text-align: center;
   word-break: break-word;
   position: relative;
+}
+
+.you {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-hint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: 4px;
 }
 
 .score {

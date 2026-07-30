@@ -43,7 +43,7 @@ export default async function eventRoutes(app: FastifyInstance): Promise<void> {
     },
   )
 
-  app.get<{ Params: { code: string }; Querystring: { ticket?: string } }>(
+  app.get<{ Params: { code: string }; Querystring: { ticket?: string; lastEventId?: string } }>(
     '/rooms/:code/events',
     async (req, reply) => {
       const claim = req.query.ticket ? app.tickets.redeem(req.query.ticket) : null
@@ -77,9 +77,10 @@ export default async function eventRoutes(app: FastifyInstance): Promise<void> {
         }),
       )
 
-      // Браузер сам присылает Last-Event-ID при переподключении. Пропущенное едет
-      // одним кадром и только ради уведомлений: состояние уже свежее из sync.
-      const since = Number(req.headers['last-event-id'] ?? 0)
+      // Заголовок присылает браузер при своём переподключении, параметр — клиент,
+      // когда пересоздаёт соединение сам: билет одноразовый, поэтому переподключение
+      // у нас ручное, а заголовки EventSource выставлять не умеет.
+      const since = Number(req.query.lastEventId ?? req.headers['last-event-id'] ?? 0)
       if (Number.isFinite(since) && since > 0 && since < seq) {
         const missed = listEventsSince(app.db, room.id, since)
         if (missed.length > 0) {

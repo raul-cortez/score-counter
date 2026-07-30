@@ -1,162 +1,64 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import type { Player } from '../types'
+import { computed, ref } from 'vue'
+import type { GameDetails, RoomState } from '@score/shared'
 
-defineProps<{
-  winner: Player
+const props = defineProps<{
+  state: RoomState
+  game: GameDetails
+  meId: string
+  busy: boolean
 }>()
 
-const emit = defineEmits<{
-  newGame: []
-}>()
+const emit = defineEmits<{ playAgain: [scoreLimit: number]; leave: [] }>()
 
-type Particle = {
-  id: number
-  x: number
-  y: number
-  color: string
-  size: number
-  velocityX: number
-  velocityY: number
-}
+const scoreLimit = ref(props.game.scoreLimit)
 
-const particles = ref<Particle[]>([])
-let particleId = 0
-let animationFrame: number
-let intervalId: number
-let audioContext: AudioContext | null = null
+const isHost = computed(() => props.meId === props.state.room.hostUserId)
+const winner = computed(() =>
+  props.game.players.find((player) => player.id === props.game.winnerUserId),
+)
 
-const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#1dd1a1']
-
-const playFireworkSound = () => {
-  if (!audioContext) {
-    audioContext = new AudioContext()
-  }
-
-  const now = audioContext.currentTime
-  const duration = 1.5
-
-  // White noise for swoosh effect
-  const bufferSize = audioContext.sampleRate * duration
-  const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
-  const output = noiseBuffer.getChannelData(0)
-  for (let i = 0; i < bufferSize; i++) {
-    output[i] = Math.random() * 2 - 1
-  }
-
-  const whiteNoise = audioContext.createBufferSource()
-  whiteNoise.buffer = noiseBuffer
-
-  // Filter for swoosh texture
-  const filter = audioContext.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.frequency.setValueAtTime(1000 + Math.random() * 500, now)
-  filter.frequency.exponentialRampToValueAtTime(200, now + duration)
-  filter.Q.value = 1
-
-  // Volume envelope - long fade out
-  const gain = audioContext.createGain()
-  gain.gain.setValueAtTime(0.25, now)
-  gain.gain.exponentialRampToValueAtTime(0.01, now + duration)
-
-  whiteNoise.connect(filter)
-  filter.connect(gain)
-  gain.connect(audioContext.destination)
-
-  whiteNoise.start(now)
-  whiteNoise.stop(now + duration)
-
-  // Sparkle layer
-  const sparkle = audioContext.createOscillator()
-  const sparkleGain = audioContext.createGain()
-  sparkle.type = 'sine'
-  sparkle.frequency.setValueAtTime(2000 + Math.random() * 1000, now)
-  sparkle.frequency.exponentialRampToValueAtTime(500, now + duration * 0.8)
-  sparkleGain.gain.setValueAtTime(0.08, now)
-  sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8)
-  sparkle.connect(sparkleGain)
-  sparkleGain.connect(audioContext.destination)
-  sparkle.start(now)
-  sparkle.stop(now + duration)
-}
-
-const createFirework = (x: number, y: number) => {
-  const count = 30
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count
-    const velocity = 3 + Math.random() * 3
-    particles.value.push({
-      id: particleId++,
-      x,
-      y,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      size: 4 + Math.random() * 4,
-      velocityX: Math.cos(angle) * velocity,
-      velocityY: Math.sin(angle) * velocity
-    })
-  }
-  playFireworkSound()
-}
-
-const animate = () => {
-  particles.value = particles.value
-    .map(p => ({
-      ...p,
-      x: p.x + p.velocityX,
-      y: p.y + p.velocityY,
-      velocityY: p.velocityY + 0.1,
-      size: p.size * 0.96
-    }))
-    .filter(p => p.size > 0.5)
-
-  animationFrame = requestAnimationFrame(animate)
-}
-
-const launchRandomFirework = () => {
-  const x = Math.random() * window.innerWidth
-  const y = Math.random() * (window.innerHeight * 0.6)
-  createFirework(x, y)
-}
-
-onMounted(() => {
-  launchRandomFirework()
-  launchRandomFirework()
-  launchRandomFirework()
-
-  intervalId = setInterval(launchRandomFirework, 800)
-  animate()
-})
-
-onUnmounted(() => {
-  cancelAnimationFrame(animationFrame)
-  clearInterval(intervalId)
-  audioContext?.close()
-})
+/** Итоговая таблица: сверху победитель, дальше по убыванию очков. */
+const standings = computed(() =>
+  [...props.game.players].sort(
+    (a, b) => (props.game.scores[b.id] ?? 0) - (props.game.scores[a.id] ?? 0),
+  ),
+)
 </script>
 
 <template>
   <div class="victory-root">
-    <div class="fireworks">
-      <div
-        v-for="p in particles"
-        :key="p.id"
-        class="particle"
-        :style="{
-          left: `${p.x}px`,
-          top: `${p.y}px`,
-          width: `${p.size}px`,
-          height: `${p.size}px`,
-          background: p.color
-        }"
-      />
-    </div>
-
     <div class="content">
-      <h1 class="title">{{ winner.name }} победил!</h1>
-      <p class="score">{{ winner.score }} очков</p>
-      <button class="btn-new" @click="emit('newGame')">
-        Новая игра
-      </button>
+      <h1 class="title">{{ winner?.nickname ?? 'Ничья' }}</h1>
+      <p class="subtitle">{{ winner?.id === meId ? 'вы победили!' : 'победил' }}</p>
+
+      <ul class="standings">
+        <li v-for="(player, index) in standings" :key="player.id" class="place">
+          <span class="rank">{{ index + 1 }}</span>
+          <span class="nick">
+            {{ player.nickname }}
+            <span v-if="player.id === meId" class="you">вы</span>
+          </span>
+          <span class="place-score">{{ game.scores[player.id] ?? 0 }}</span>
+        </li>
+      </ul>
+
+      <template v-if="isHost">
+        <label class="limit">
+          <span>Следующая до</span>
+          <input v-model.number="scoreLimit" class="limit-input" type="number" min="1" max="10000" />
+        </label>
+        <button
+          class="btn-new"
+          :disabled="scoreLimit < 1 || busy"
+          @click="emit('playAgain', scoreLimit)"
+        >
+          Играть ещё
+        </button>
+      </template>
+      <p v-else class="hint">Хост может начать новую игру тем же составом.</p>
+
+      <button class="btn-quiet" @click="emit('leave')">Выйти из комнаты</button>
     </div>
   </div>
 </template>
@@ -167,45 +69,112 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.fireworks {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
 }
 
 .content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   text-align: center;
-  z-index: 10;
+  max-width: 460px;
+  width: 100%;
 }
 
 .title {
   font-size: 36px;
   font-weight: 700;
-  margin: 0 0 16px;
-  animation: bounce 0.6s ease-out;
+  word-break: break-word;
 
   @media (min-width: 600px) {
     font-size: 48px;
   }
 }
 
-.score {
-  font-size: 24px;
+.subtitle {
+  font-size: 20px;
   color: var(--text-muted);
-  margin: 0 0 32px;
+  margin-bottom: 8px;
+}
+
+.standings {
+  list-style: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.place {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+
+  &:first-child {
+    border-color: var(--btn-bg);
+  }
+}
+
+.rank {
+  color: var(--text-hint);
+  font-variant-numeric: tabular-nums;
+  width: 18px;
+}
+
+.nick {
+  flex: 1;
+  min-width: 0;
+}
+
+.you {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-hint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: 4px;
+}
+
+.place-score {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.limit-input {
+  width: 120px;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 17px;
+  text-align: center;
+  background: var(--bg-card);
+  color: var(--text);
+
+  &:focus {
+    outline: none;
+    border-color: var(--btn-bg);
+  }
 }
 
 .btn-new {
+  width: 100%;
   padding: 16px 32px;
   background: var(--btn-bg);
   color: var(--btn-text);
@@ -216,22 +185,31 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.15s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--btn-hover);
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 }
 
-@keyframes bounce {
-  0% {
-    transform: scale(0.5);
-    opacity: 0;
+.btn-quiet {
+  padding: 12px 20px;
+  background: transparent;
+  color: var(--text-hint);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--border-hover);
   }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+}
+
+.hint {
+  color: var(--text-hint);
+  font-size: 14px;
 }
 </style>

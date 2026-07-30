@@ -28,6 +28,20 @@ const addEntrySchema = {
 
 type AddEntryBody = { id: string; userId: string; points: number }
 
+const replaceEntrySchema = {
+  body: {
+    type: 'object',
+    required: ['id', 'points'],
+    additionalProperties: false,
+    properties: {
+      id: { type: 'string', minLength: 1, maxLength: 64 },
+      points: { type: 'integer', minimum: 1, maximum: 10000 },
+    },
+  },
+}
+
+type ReplaceEntryBody = { id: string; points: number }
+
 /**
  * Пересчитывает исход по всему журналу и приводит строку игры в соответствие.
  * Вызывается внутри той же транзакции, что и изменение журнала, — иначе два
@@ -118,6 +132,61 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
         // Отмена может вернуть игру в active — клиент увидит это в снимке.
         settleGame(app.db, game, playerIds)
         return [{ type: 'entry_voided', payload: { entryId: entry.id, userId: entry.userId } }]
+      })
+    },
+  )
+
+  /**
+   * Исправить записанные очки: отменить прежнюю запись и завести новую одной
+   * транзакцией.
+   *
+   * Отдельный маршрут нужен именно ради атомарности. Тем же самым двумя запросами
+   * отмена победной записи успевала вернуть игру в active, и экран победы мигал у
+   * всех за столом. Журнал при этом не переписывается: прежняя запись остаётся
+   * видна отменённой, чтобы за столом было понятно, кто что исправил.
+   */
+  app.post<{ Params: { id: string }; Body: ReplaceEntryBody }>(
+    '/entries/:id/replace',
+    { schema: replaceEntrySchema, preHandler: app.requireAuth },
+    async (req, reply) => {
+      const entry = findEntryByClientId(app.db, req.params.id)
+      if (!entry) {
+        return reply.code(404).send({ error: 'entry_not_found' })
+      }
+
+      const game = findGameById(app.db, entry.gameId)!
+      const room = findRoomById(app.db, game.room_id)!
+      const playerIds = listGamePlayerIds(app.db, game.id)
+      const ctx = { actorId: req.currentUser!.id, hostId: room.host_user_id, playerIds }
+
+      if (!canVoidEntry(ctx, entry.userId) || !canAddEntryFor(ctx, entry.userId)) {
+        return reply.code(403).send({ error: 'not_allowed' })
+      }
+
+      // Проверка повтора идёт раньше проверки отменённости: при обрыве связи клиент
+      // шлёт тот же запрос ещё раз, а прежняя запись к тому моменту уже отменена.
+      if (findEntryByClientId(app.db, req.body.id) !== null) {
+        return app.roomState(game.room_id)!
+      }
+      if (entry.voidedAt !== null) {
+        return reply.code(409).send({ error: 'entry_already_voided' })
+      }
+
+      return app.mutateRoom(game.room_id, () => {
+        voidEntry(app.db, entry.id, req.currentUser!.id)
+        const added = insertEntry(app.db, {
+          id: req.body.id,
+          gameId: game.id,
+          userId: entry.userId,
+          points: req.body.points,
+          createdBy: req.currentUser!.id,
+        })
+        settleGame(app.db, game, playerIds)
+
+        return [
+          { type: 'entry_voided', payload: { entryId: entry.id, userId: entry.userId } },
+          { type: 'entry_added', payload: { entry: added } },
+        ]
       })
     },
   )
