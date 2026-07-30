@@ -2,9 +2,18 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Счётчик очков</title>
+    <meta name="description" content="Общий счёт для настольных игр: каждый пишет со своего телефона" />
+
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Цвет строки состояния подстраивается под тему приложения. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f9f9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1a1a" />
+    <meta name="mobile-web-app-capable" content="yes" />
   </head>
   <body>
     <div id="app"></div>

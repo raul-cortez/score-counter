@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Счётчик очков">
+  <rect width="512" height="512" rx="112" fill="#1a1a1a"/>
+  <g fill="none" stroke="#f0f0f0" stroke-width="26" stroke-linecap="round">
+    <!-- Четыре палочки и перечёркивающая пятая: как считают очки на бумаге. -->
+    <path d="M150 168V344"/>
+    <path d="M212 168V344"/>
+    <path d="M274 168V344"/>
+    <path d="M336 168V344"/>
+    <path d="M126 330L360 182"/>
+  </g>
+</svg>

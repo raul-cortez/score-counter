@@ -5,6 +5,12 @@ const routes = [
   { path: '/hello', name: 'hello', component: () => import('./views/HelloView.vue') },
   { path: '/', name: 'lobby', component: () => import('./views/LobbyView.vue') },
   { path: '/room/:code', name: 'room', component: () => import('./views/RoomView.vue') },
+  { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue') },
+  {
+    path: '/history/:gameId',
+    name: 'game-detail',
+    component: () => import('./views/GameDetailView.vue'),
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 

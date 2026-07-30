@@ -44,7 +44,10 @@ async function create(): Promise<void> {
   <div class="lobby-root">
     <header class="head">
       <h1 class="title">Комнаты</h1>
-      <span class="me">{{ session.user?.nickname }}</span>
+      <span class="me">
+        {{ session.user?.nickname }}
+        <RouterLink class="history-link" to="/history">мои игры</RouterLink>
+      </span>
     </header>
 
     <RouterLink
@@ -121,7 +124,20 @@ async function create(): Promise<void> {
 }
 
 .me {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   color: var(--text-muted);
+}
+
+.history-link {
+  font-size: 13px;
+  color: var(--text-hint);
+
+  &:hover {
+    color: var(--text-muted);
+  }
 }
 
 .resume {

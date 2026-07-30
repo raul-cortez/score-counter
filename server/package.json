@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "^10.1.2",
     "@node-rs/argon2": "^2.0.0",
     "@score/shared": "workspace:*",
     "better-sqlite3": "^11.5.0",

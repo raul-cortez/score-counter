@@ -119,6 +119,29 @@ describe('поток событий на живом сокете', () => {
     expect(finished.data.state.game.status).toBe('finished')
   })
 
+  // Правка приводит к победе так же, как обычная запись, и событие о ней
+  // обязано уйти: иначе за столом никто не узнает, что партия закончилась.
+  it('сообщает о победе и когда она пришла через правку', async () => {
+    const { anya, boris, code } = await table()
+    const started = (await api(`/rooms/${code}/games`, anya.token, { scoreLimit: 20 })) as RoomState
+
+    const stream = await subscribe(code, boris)
+    await stream.waitFor((frame) => frame.event === 'sync')
+
+    const entryId = randomUUID()
+    await api(`/games/${started.game!.id}/entries`, anya.token, {
+      id: entryId,
+      userId: anya.id,
+      points: 5,
+    })
+    await api(`/entries/${entryId}/replace`, anya.token, { id: randomUUID(), points: 25 })
+
+    const finished = await stream.waitFor((frame) => frame.event === 'game_finished')
+
+    expect(finished.data.payload.winnerUserId).toBe(anya.id)
+    expect(finished.data.state.game.status).toBe('finished')
+  })
+
   it('рассказывает остальным о подключении и отключении', async () => {
     const { anya, boris, code } = await table()
     const наблюдатель = await subscribe(code, anya)

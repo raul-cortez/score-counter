@@ -100,3 +100,48 @@ export type Game = {
   finishedAt: number | null
   winnerUserId: string | null
 }
+
+/** Строка в списке «мои игры»: всё, что нужно нарисовать её, без второго запроса. */
+export type GameHistoryItem = {
+  id: string
+  roomName: string
+  roomCode: string
+  scoreLimit: number
+  status: GameStatus
+  startedAt: number
+  finishedAt: number | null
+  winnerUserId: string | null
+  myScore: number
+  players: PublicUser[]
+}
+
+/** Разбор одной партии для экрана истории: имена и раздачи, без второго запроса. */
+export type GameHistoryDetails = {
+  id: string
+  roomName: string
+  roomCode: string
+  scoreLimit: number
+  status: GameStatus
+  startedAt: number
+  finishedAt: number | null
+  winnerUserId: string | null
+  players: PublicUser[]
+  entries: ScoreEntry[]
+  scores: Record<string, number>
+}
+
+export type OpponentStat = {
+  user: PublicUser
+  /** Сколько доигранных партий вместе. */
+  games: number
+  /** Сколько из них выиграл он. */
+  theirWins: number
+}
+
+/** Брошенные партии в сводку не идут: они ничего не говорят о победах. */
+export type MyStats = {
+  gamesPlayed: number
+  wins: number
+  bestScore: number
+  opponents: OpponentStat[]
+}

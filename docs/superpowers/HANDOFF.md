@@ -2,7 +2,7 @@
 
 Документ для входа в работу с нуля. Обновлять при завершении каждого плана.
 
-**Состояние на 2026-07-30:** сервер и клиент готовы и покрыты тестами. Играть можно. Остались история, статистика, PWA и деплой — план 4.
+**Состояние на 2026-07-30:** всё готово и проверено, включая образ. Не выкачено: деплой ждёт решения владельца, см. `docs/DEPLOY.md`.
 
 ---
 
@@ -50,25 +50,29 @@ score-counter/            # git, ветка main, работаем прямо в
 │   │   ├── views/        # HelloView, LobbyView, RoomView
 │   │   └── components/   # WaitingRoom, GameScreen, PlayerCard, EntriesLog,
 │   │                     # VictoryScreen, ConnectionBanner
-│   └── test/             # 3 файла, 40 тестов
+│   └── test/             # 4 файла, 51 тест
 ├── server/
 │   ├── src/
 │   │   ├── domain/       # чистая логика без БД и HTTP: score, victory, permissions, code, host, abandoned
 │   │   ├── repo/         # SQL: users, sessions, rooms, games, entries, events
 │   │   ├── state/        # roomState.ts — сборка RoomState
 │   │   ├── realtime/     # registry, tickets, sse, mutate, hostWatch
-│   │   ├── routes/       # auth, rooms, games, entries, events
-│   │   ├── plugins/      # auth (Bearer), errors (единая форма)
+│   │   ├── routes/       # auth, rooms, games, entries, events, history
+│   │   ├── plugins/      # auth (Bearer), errors (+ SPA-fallback), spa (статика)
 │   │   ├── db/           # schema.ts (DDL строкой), index.ts (openDb)
 │   │   └── app.ts        # buildApp(db, options)
-│   └── test/             # 29 файлов, 191 тест
+│   └── test/             # 31 файл, 213 тестов
 ├── shared/src/index.ts   # типы, общие для клиента и сервера (@score/shared)
-└── docs/superpowers/
-    ├── specs/2026-07-30-multiplayer-score-counter-design.md
-    ├── plans/2026-07-30-server-foundation.md      # план 1, выполнен
-    ├── plans/2026-07-30-room-state-api.md         # план 1b, выполнен
-    ├── plans/2026-07-30-realtime.md               # план 2, выполнен
-    └── plans/2026-07-30-client.md                 # план 3, выполнен
+├── Dockerfile            # один образ: API, поток и статика
+└── docs/
+    ├── DEPLOY.md         # выкатка в Coolify
+    └── superpowers/
+        ├── specs/2026-07-30-multiplayer-score-counter-design.md
+        ├── plans/2026-07-30-server-foundation.md      # план 1, выполнен
+        ├── plans/2026-07-30-room-state-api.md         # план 1b, выполнен
+        ├── plans/2026-07-30-realtime.md               # план 2, выполнен
+        ├── plans/2026-07-30-client.md                 # план 3, выполнен
+        └── plans/2026-07-30-history-and-release.md    # план 4, выполнен
 ```
 
 Схема лежит в `.ts`, а не в `.sql`, намеренно: попадает в бандл сама, копировать при сборке не надо.
@@ -83,8 +87,8 @@ source ~/.nvm/nvm.sh && nvm use 22
 # либо: export PATH="$HOME/.nvm/versions/node/v22.23.2/bin:$PATH"
 
 pnpm install
-pnpm --filter server test          # 191 тест
-pnpm --filter client test          # 40 тестов
+pnpm --filter server test          # 213 тестов
+pnpm --filter client test          # 51 тест
 pnpm --filter server test screens  # по имени файла
 pnpm --filter server test sse      # поток на настоящем сокете
 pnpm typecheck                     # ОБЯЗАТЕЛЬНО перед коммитом: тесты типы не проверяют
@@ -146,7 +150,12 @@ GET  /api/games/:id                              → плоская форма, 
 
 POST /api/rooms/:code/events/ticket              → {ticket, expiresIn}
 GET  /api/rooms/:code/events?ticket=…            → поток SSE
+
+GET  /api/me/games?limit=                        → GameHistoryItem[]
+GET  /api/me/stats                               → MyStats
 ```
+
+`GET /api/games/:id` отдаёт разбор партии с именами и раздачами; доступ — по составу партии, поэтому вышедший из комнаты свою историю не теряет.
 
 **Единственная форма ответа** у всего, что меняет состояние:
 
@@ -201,7 +210,16 @@ type GameDetails = {
 - **Прокси Vite в dev** настроен с `timeout: 0` и своим обработчиком ошибок: иначе долгий поток обрывается по таймауту, а ошибка апстрима всплывает наверх.
 - Экраны истории (`/history`) сюда не вошли — они уехали в план 4 к своим эндпоинтам.
 
-**План 4 — история и выпуск (не написан).** Запросы истории и статистики (`/api/me/games`, `/api/me/stats`), PWA, `Dockerfile`, раздача статики тем же сервером, деплой в Coolify.
+**План 4 — история и выпуск (выполнен, кроме самой выкатки).** Подробности — в `plans/2026-07-30-history-and-release.md` и `docs/DEPLOY.md`. Что важно:
+
+- **Доступ к прошлой игре — по составу партии**, а не по членству в комнате. Иначе ушедший из комнаты терял бы доступ к собственной истории.
+- **`GET /api/games/:id` отдаёт имена и название комнаты.** Раньше в ответе были одни идентификаторы, и экран разбора было физически не нарисовать — та же дыра, что чинил план 1b.
+- **Брошенные партии в сводку не идут:** они ничего не говорят ни о победах, ни о поражениях.
+- **SPA-fallback живёт в обработчике 404 плагина ошибок**, а не отдельным обработчиком: Fastify разрешает только один такой на инстанс. Запросы к `/api/` под него не попадают, иначе опечатка в адресе возвращала бы HTML.
+- **Service worker кэширует только оболочку и ассеты.** Закэшированный счёт хуже отсутствующего.
+- **Том `/data` обязателен.** Без него первый передеплой сотрёт историю.
+
+Не сделано намеренно: сама выкатка на VPS. Всё остальное проверено на собранном образе — статика, прямая ссылка на комнату, поток событий, история, переживание перезапуска.
 
 ---
 

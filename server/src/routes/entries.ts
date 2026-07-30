@@ -181,12 +181,19 @@ export default async function entryRoutes(app: FastifyInstance): Promise<void> {
           points: req.body.points,
           createdBy: req.currentUser!.id,
         })
-        settleGame(app.db, game, playerIds)
 
-        return [
+        const events: PendingEvent[] = [
           { type: 'entry_voided', payload: { entryId: entry.id, userId: entry.userId } },
           { type: 'entry_added', payload: { entry: added } },
         ]
+
+        // Правка может привести к победе ровно так же, как обычная запись.
+        const winner = settleGame(app.db, game, playerIds)
+        if (winner !== null) {
+          events.push({ type: 'game_finished', payload: { gameId: game.id, winnerUserId: winner } })
+        }
+
+        return events
       })
     },
   )

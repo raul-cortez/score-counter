@@ -8,6 +8,8 @@ import roomRoutes from './routes/rooms.js'
 import gameRoutes from './routes/games.js'
 import entryRoutes from './routes/entries.js'
 import eventRoutes from './routes/events.js'
+import historyRoutes from './routes/history.js'
+import spaPlugin, { resolveAppShell } from './plugins/spa.js'
 import { createRegistry } from './realtime/registry.js'
 import { createTickets } from './realtime/tickets.js'
 import { createHostWatch } from './realtime/hostWatch.js'
@@ -20,6 +22,8 @@ export type AppOptions = {
   hostGraceMs?: number
   /** Срок жизни билета на подключение. */
   ticketTtlMs?: number
+  /** Каталог собранного клиента. Без него сервер отдаёт только API. */
+  staticRoot?: string
 }
 
 export function buildApp(db: Db, options: AppOptions = {}): FastifyInstance {
@@ -95,8 +99,10 @@ export function buildApp(db: Db, options: AppOptions = {}): FastifyInstance {
       message: 'слишком много попыток, попробуйте позже',
     }),
   })
-  app.register(errorsPlugin)
+  const appShell = resolveAppShell(options.staticRoot)
+  app.register(errorsPlugin, { appShell: appShell !== null })
   app.register(authPlugin)
+  if (appShell !== null) app.register(spaPlugin, { root: appShell })
 
   app.get('/api/health', async () => ({ status: 'ok' }))
   app.register(authRoutes, { prefix: '/api' })
@@ -104,6 +110,7 @@ export function buildApp(db: Db, options: AppOptions = {}): FastifyInstance {
   app.register(gameRoutes, { prefix: '/api' })
   app.register(entryRoutes, { prefix: '/api' })
   app.register(eventRoutes, { prefix: '/api' })
+  app.register(historyRoutes, { prefix: '/api' })
 
   return app
 }
