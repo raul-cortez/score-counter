@@ -1,15 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { buildApp } from '../src/app.js'
+import { makeApp, closeApp } from './helpers.js'
 
 describe('GET /api/health', () => {
   it('отвечает ok', async () => {
-    const app = buildApp()
-    await app.ready()
+    const ctx = await makeApp()
 
-    const res = await app.inject({ method: 'GET', url: '/api/health' })
+    const res = await ctx.app.inject({ method: 'GET', url: '/api/health' })
 
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ status: 'ok' })
-    await app.close()
+    await closeApp(ctx)
   })
 })
