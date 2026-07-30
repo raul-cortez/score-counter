@@ -85,6 +85,10 @@ describe('GET /api/me', () => {
       payload: { name: 'Вторая' },
     })
 
+    // Обе комнаты и так создаются почти в одну миллисекунду; сравниваем время явно,
+    // чтобы ничья проверялась на каждом прогоне, а не когда повезёт с часами.
+    ctx.db.prepare('UPDATE room_members SET joined_at = 1000 WHERE user_id = ?').run(anya.user.id)
+
     const res = await ctx.app.inject({
       method: 'GET',
       url: '/api/me',

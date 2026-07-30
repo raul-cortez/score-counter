@@ -101,6 +101,10 @@ export function addMember(db: Db, roomId: string, userId: string): void {
   ).run(roomId, userId, Date.now())
 }
 
+export function setHost(db: Db, roomId: string, userId: string): void {
+  db.prepare('UPDATE rooms SET host_user_id = ? WHERE id = ?').run(userId, roomId)
+}
+
 export function removeMember(db: Db, roomId: string, userId: string): void {
   db.prepare('UPDATE room_members SET left_at = ? WHERE room_id = ? AND user_id = ?').run(
     Date.now(),
@@ -139,7 +143,14 @@ export function listMembers(db: Db, roomId: string): UserRow[] {
     .all(roomId) as UserRow[]
 }
 
-/** Последняя открытая комната, в которой человек состоит, — куда вернуть его после F5. */
+/**
+ * Последняя открытая комната, в которой человек состоит, — куда вернуть его после F5.
+ *
+ * Ничью разрешает rowid, а не код комнаты: joined_at имеет разрешение в миллисекунду,
+ * и две комнаты, созданные подряд, получают одно время. Код случаен, поэтому
+ * сортировка по нему отправляла бы человека то в одну комнату, то в другую.
+ * rowid растёт с каждой вставкой и задаёт настоящий порядок входов.
+ */
 export function findActiveRoomCode(db: Db, userId: string): string | null {
   const row = db
     .prepare(
@@ -148,7 +159,7 @@ export function findActiveRoomCode(db: Db, userId: string): string | null {
        WHERE room_members.user_id = ?
          AND room_members.left_at IS NULL
          AND rooms.closed_at IS NULL
-       ORDER BY room_members.joined_at DESC, rooms.code DESC
+       ORDER BY room_members.joined_at DESC, room_members.rowid DESC
        LIMIT 1`,
     )
     .get(userId) as { code: string } | undefined
