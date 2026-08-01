@@ -1,0 +1,44 @@
+# Накладка: трафик пускает Traefik, который уже работает на машине.
+#
+# Нужна там, где 80 и 443 заняты чужим прокси — свой Caddy туда не встанет, и
+# второй ACME-клиент на тех же портах не нужен. Caddy из базового файла гасится
+# профилем: сервис с profiles не поднимается, пока профиль не назван явно.
+#
+#   docker compose -f compose.yaml -f compose.traefik.yaml up -d
+#
+# Годится и тогда, когда Traefik поднят Coolify: панель для этого не нужна,
+# достаточно попасть в его сеть и повесить метки.
+
+services:
+  app:
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${PROXY_NETWORK:-coolify}
+
+      traefik.http.routers.score.rule: Host(`${DOMAIN:?укажите DOMAIN в .env}`)
+      traefik.http.routers.score.entrypoints: ${TRAEFIK_ENTRYPOINT:-https}
+      traefik.http.services.score.loadbalancer.server.port: "3000"
+
+      # Сертификат не запрашиваем: на машине с wildcard-сертификатом Traefik
+      # подберёт готовый по SNI. Если своего сертификата на домен там нет,
+      # добавьте certresolver того резолвера, которым прокси выдаёт остальные.
+      traefik.http.routers.score.tls: "true"
+
+      # Сжатие к потоку событий применять нельзя: буфер компрессора копит кадры,
+      # и обновления приходят пачками вместо того, чтобы идти сразу.
+      traefik.http.middlewares.score-compress.compress.excludedContentTypes: text/event-stream
+      traefik.http.routers.score.middlewares: score-compress
+
+  # Прокси на машине уже есть — свой не поднимаем.
+  caddy:
+    profiles:
+      - own-proxy
+
+networks:
+  proxy:
+    # Сеть создаёт прокси, а не мы: подключаемся к существующей.
+    external: true
+    name: ${PROXY_NETWORK:-coolify}
