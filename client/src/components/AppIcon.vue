@@ -17,6 +17,8 @@ export type IconName =
   | 'back'
   | 'exit'
   | 'chevron'
+  | 'check'
+  | 'close'
 
 const PATHS: Record<IconName, string[]> = {
   crown: ['M4 18h16', 'M4 18 2.9 8.4l5.2 3.3L12 5l3.9 6.7 5.2-3.3L20 18'],
@@ -32,6 +34,8 @@ const PATHS: Record<IconName, string[]> = {
   back: ['M15 5l-7 7 7 7'],
   exit: ['M9 20H5.5A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H9', 'M16 8l4 4-4 4', 'M20 12H9.5'],
   chevron: ['M6 9.5l6 6 6-6'],
+  check: ['M5 12.5l4.6 4.5L19 7'],
+  close: ['M6.5 6.5l11 11', 'M17.5 6.5l-11 11'],
 }
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })

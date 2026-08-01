@@ -2,13 +2,17 @@
 import { nextTick, ref } from 'vue'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
+import AppIcon from './AppIcon.vue'
 
 /**
  * Смена имени.
  *
  * Имя показывается там же, где меняется: отдельного экрана настроек в приложении нет
- * и заводить его ради одного поля незачем. За столом имя правят на ходу — когда
- * выяснилось, что за ним двое Саш, — поэтому редактор живёт и в лобби, и в комнате.
+ * и заводить его ради одного поля незачем. Живёт в шапке — за столом имя правят на
+ * ходу, когда выясняется, что за ним двое Саш.
+ *
+ * Карандаш рядом обязателен: без него имя выглядит просто подписью, и что по нему
+ * можно нажать, никто не догадывается.
  */
 const session = useSessionStore()
 
@@ -67,15 +71,30 @@ async function save(): Promise<void> {
         @keydown.enter="save"
         @keydown.esc="cancel"
       />
-      <button class="btn-tiny" :disabled="draft.trim() === '' || busy" @click="save">
-        {{ busy ? '…' : 'Готово' }}
+      <!--
+        Подтверждение и отмена значками, а не словами: редактор живёт в шапке рядом
+        с другими кнопками-иконками, и пара «Готово · Отмена» распирала строку так,
+        что на узком экране имя переносилось.
+      -->
+      <button
+        class="btn-tiny"
+        type="button"
+        title="Готово"
+        aria-label="Сохранить имя"
+        :disabled="draft.trim() === '' || busy"
+        @click="save"
+      >
+        <AppIcon name="check" :size="15" />
       </button>
-      <button class="btn-tiny" @click="cancel">Отмена</button>
+      <button class="btn-tiny" type="button" title="Отмена" aria-label="Отменить" @click="cancel">
+        <AppIcon name="close" :size="15" />
+      </button>
       <span v-if="error" class="name-error">{{ error }}</span>
     </template>
 
     <button v-else class="current" title="Сменить имя" @click="start">
       {{ session.user?.nickname }}
+      <AppIcon class="pencil" name="pencil" :size="13" />
     </button>
   </span>
 </template>
@@ -105,6 +124,11 @@ async function save(): Promise<void> {
   }
 }
 
+/* Бледнее имени: подсказка «сюда можно нажать», а не самостоятельный знак. */
+.pencil {
+  color: var(--text-hint);
+}
+
 .name-field {
   width: 140px;
   padding: 4px 8px;
@@ -120,9 +144,14 @@ async function save(): Promise<void> {
   }
 }
 
+/* Квадратные под значок: две кнопки со словами распирали строку шапки. */
 .btn-tiny {
-  padding: 4px 8px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   background: none;
   border: 1px solid var(--border);
   border-radius: 6px;
