@@ -53,6 +53,25 @@ export function retryDelay(attempt: number): number {
  */
 export const SILENCE_LIMIT_MS = 60_000
 
+/**
+ * Через сколько молчания считать соединение мёртвым при возвращении к экрану.
+ *
+ * Телефон, уснув, замораживает и таймеры, и сокеты: просыпаешься — соединение
+ * формально открыто, а на том конце давно никого. Порог мягче общего: ping ходит
+ * раз в 25 секунд, поэтому 30 не даст ложных переподключений при простом
+ * переключении вкладок, но поймает сон.
+ */
+export const WAKE_STALE_MS = 30_000
+
+/**
+ * Сколько неудачных попыток подряд терпеть, прежде чем сказать «нет связи».
+ *
+ * Обрыв на секунду — обычное дело в дороге и при пробуждении экрана; пугать им
+ * не за чем. Первые попытки идут под вывеской «подключаемся», и обычно всё
+ * успевает восстановиться, не потревожив стол.
+ */
+export const OFFLINE_AFTER_ATTEMPTS = 2
+
 type Deps = {
   /** Подменяется в тестах: настоящий EventSource требует сети. */
   createEventSource?: (url: string) => EventSource
@@ -60,6 +79,10 @@ type Deps = {
   setIntervalFn?: typeof setInterval
   now?: () => number
 }
+
+/** В тестах на сервере глобалей может не быть — тогда просто некому будить поток. */
+const doc: Document | undefined = typeof document === 'undefined' ? undefined : document
+const win: Window | undefined = typeof window === 'undefined' ? undefined : window
 
 export function openRoomStream(
   code: string,
@@ -76,6 +99,15 @@ export function openRoomStream(
   let lastEventId: number | undefined
   let closed = false
   let lastHeard = now()
+  /**
+   * Номер живой попытки. Отложенное переподключение сверяется с ним перед тем,
+   * как что-то делать: иначе пробуждение экрана и сработавший таймер открыли бы
+   * два соединения разом, а комната посчитала бы человека дважды.
+   */
+  let generation = 0
+
+  const statusFor = (): ConnectionStatus =>
+    attempt < OFFLINE_AFTER_ATTEMPTS ? 'connecting' : 'offline'
 
   /**
    * Обрывает поток, который замолчал.
@@ -98,7 +130,8 @@ export function openRoomStream(
 
   function connect(): void {
     if (closed) return
-    handlers.onStatus(attempt === 0 ? 'connecting' : 'offline')
+    handlers.onStatus(statusFor())
+    const mine = generation
 
     void (async () => {
       let ticket: string
@@ -106,10 +139,12 @@ export function openRoomStream(
         const issued = await api.post<{ ticket: string }>(`/rooms/${code}/events/ticket`)
         ticket = issued.ticket
       } catch {
-        retry()
+        if (mine === generation) retry()
         return
       }
-      if (closed) return
+      // Пока ходили за билетом, экран мог проснуться и начать всё заново — тогда
+      // это подключение уже лишнее, а билет одноразовый и просто протухнет.
+      if (closed || mine !== generation) return
 
       const query = new URLSearchParams({ ticket })
       // Браузер сам Last-Event-ID уже не пришлёт: соединение создаётся заново.
@@ -148,17 +183,58 @@ export function openRoomStream(
 
   function retry(): void {
     if (closed) return
-    handlers.onStatus('offline')
-    const delay = retryDelay(attempt)
     attempt += 1
-    schedule(connect, delay)
+    handlers.onStatus(statusFor())
+
+    const delay = retryDelay(attempt - 1)
+    const mine = ++generation
+    schedule(() => {
+      if (mine === generation) connect()
+    }, delay)
   }
+
+  /**
+   * Экран вернулся к человеку — или сеть вернулась к телефону.
+   *
+   * Раньше после сна приложение ждало очередной попытки по расписанию: отступы
+   * растут до десяти секунд, и всё это время на экране висело «нет связи», хотя
+   * связь уже была. Здесь мы не ждём — пробуем немедленно.
+   */
+  function wake(): void {
+    if (closed) return
+    const alive = source !== null && now() - lastHeard < WAKE_STALE_MS
+    if (alive) return
+
+    const dead = source
+    source = null
+    dead?.close()
+
+    // Отменяем отложенную попытку и начинаем как с чистого листа: раз человек
+    // смотрит на экран, показывать ему «нет связи» с первой же секунды не надо.
+    generation += 1
+    attempt = 0
+    connect()
+  }
+
+  function onVisible(): void {
+    if (doc?.visibilityState !== 'hidden') wake()
+  }
+
+  doc?.addEventListener('visibilitychange', onVisible)
+  win?.addEventListener('online', wake)
+  // Возврат в приложение с телефона не всегда меняет видимость: iOS будит вкладку
+  // из фона именно фокусом.
+  win?.addEventListener('focus', onVisible)
 
   connect()
 
   return {
     close() {
       closed = true
+      generation += 1
+      doc?.removeEventListener('visibilitychange', onVisible)
+      win?.removeEventListener('online', wake)
+      win?.removeEventListener('focus', onVisible)
       source?.close()
       source = null
     },

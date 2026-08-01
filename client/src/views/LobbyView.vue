@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { useLobbyStore } from '../stores/lobby.js'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
-import NicknameEditor from '../components/NicknameEditor.vue'
 import AppIcon from '../components/AppIcon.vue'
 
 const lobby = useLobbyStore()
@@ -46,10 +45,7 @@ async function create(): Promise<void> {
   <div class="lobby-root">
     <header class="head">
       <h1 class="title">Комнаты</h1>
-      <span class="me">
-        <NicknameEditor />
-        <RouterLink class="history-link" to="/history">мои игры</RouterLink>
-      </span>
+      <RouterLink class="history-link" to="/history">мои игры</RouterLink>
     </header>
 
     <RouterLink
@@ -122,14 +118,6 @@ async function create(): Promise<void> {
 .title {
   font-size: 28px;
   font-weight: 700;
-}
-
-.me {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  color: var(--text-muted);
 }
 
 .history-link {

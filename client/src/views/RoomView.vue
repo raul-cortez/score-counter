@@ -6,7 +6,6 @@ import { useRoomStore } from '../stores/room.js'
 import { useSessionStore } from '../stores/session.js'
 import ConnectionBanner from '../components/ConnectionBanner.vue'
 import EntriesLog from '../components/EntriesLog.vue'
-import NicknameEditor from '../components/NicknameEditor.vue'
 import AppIcon from '../components/AppIcon.vue'
 import GameScreen from '../components/GameScreen.vue'
 import VictoryScreen from '../components/VictoryScreen.vue'
@@ -132,8 +131,6 @@ onUnmounted(() => room.disconnect())
 
       <ConnectionBanner :status="room.status" />
 
-      <p class="me-line">Вы за столом как <NicknameEditor /></p>
-
       <!-- Уведомления уходят сами через несколько секунд; клик убирает раньше. -->
       <TransitionGroup tag="ul" name="notice" class="notices">
         <li
@@ -253,16 +250,6 @@ onUnmounted(() => room.disconnect())
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/** Своё имя под рукой прямо в комнате: за столом его правят на ходу. */
-.me-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  font-size: 14px;
-  color: var(--text-muted);
 }
 
 .gate {

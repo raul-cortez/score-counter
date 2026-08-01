@@ -2,7 +2,6 @@
 import { nextTick, ref } from 'vue'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
-import AppIcon from './AppIcon.vue'
 
 /**
  * Смена имени.
@@ -77,7 +76,6 @@ async function save(): Promise<void> {
 
     <button v-else class="current" title="Сменить имя" @click="start">
       {{ session.user?.nickname }}
-      <AppIcon class="pencil" name="pencil" :size="14" />
     </button>
   </span>
 </template>
@@ -105,11 +103,6 @@ async function save(): Promise<void> {
   &:hover {
     border-color: var(--border);
   }
-}
-
-.pencil {
-  color: var(--text-hint);
-  font-size: 13px;
 }
 
 .name-field {

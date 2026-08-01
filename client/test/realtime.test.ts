@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   openRoomStream,
   retryDelay,
+  OFFLINE_AFTER_ATTEMPTS,
   SILENCE_LIMIT_MS,
+  WAKE_STALE_MS,
   type ConnectionStatus,
 } from '../src/realtime.js'
 import { roomState } from './fixtures.js'
@@ -62,11 +64,18 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Потоки живут на слушателях окна: незакрытый поток чужого теста услышал бы
+  // пробуждение экрана в следующем и полез бы подключаться.
+  opened.forEach((stream) => stream.close())
+  opened.length = 0
   vi.unstubAllGlobals()
 })
 
 /** Даёт отработать промису получения билета внутри подключения. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+/** Открытые в тесте потоки — чтобы закрыть их все разом. */
+const opened: { close: () => void }[] = []
 
 function start() {
   const frames: unknown[] = []
@@ -92,6 +101,8 @@ function start() {
       now: () => clock,
     },
   )
+
+  opened.push(stream)
 
   return {
     stream,
@@ -173,12 +184,27 @@ describe('поток комнаты', () => {
     expect(ctx.sources[0].url).not.toContain('lastEventId')
   })
 
-  it('показывает потерю связи при обрыве', async () => {
+  // Секундный обрыв — обычное дело в дороге; пугать им человека не за что.
+  it('короткий обрыв показывает как «подключаемся», а не как потерю связи', async () => {
     const ctx = start()
     await settle()
     ctx.sources[0].open()
 
     ctx.sources[0].fail()
+
+    expect(ctx.statuses.at(-1)).toBe('connecting')
+  })
+
+  it('говорит о потере связи, когда попытки подряд не помогают', async () => {
+    const ctx = start()
+    await settle()
+    ctx.sources[0].open()
+
+    for (let i = 0; i <= OFFLINE_AFTER_ATTEMPTS; i++) {
+      ctx.sources.at(-1)!.fail()
+      ctx.timers.at(-1)!()
+      await settle()
+    }
 
     expect(ctx.statuses.at(-1)).toBe('offline')
   })
@@ -199,7 +225,74 @@ describe('поток комнаты', () => {
     ctx.tickWatchdog()
 
     expect(ctx.sources[0].closed).toBe(true)
-    expect(ctx.statuses.at(-1)).toBe('offline')
+    expect(ctx.statuses.at(-1)).toBe('connecting')
+  })
+
+  /*
+   * Телефон, уснув, замораживает таймеры и сокеты. Раньше после пробуждения
+   * приложение ждало очередной попытки по расписанию — до десяти секунд с
+   * надписью «нет связи» поверх живой сети.
+   */
+  describe('пробуждение экрана', () => {
+    it('переподключается сразу, не дожидаясь отложенной попытки', async () => {
+      const ctx = start()
+      await settle()
+      ctx.sources[0].open()
+      ctx.sources[0].fail()
+      const afterFail = ctx.sources.length
+
+      ctx.advance(WAKE_STALE_MS + 1)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await settle()
+
+      expect(ctx.sources.length).toBe(afterFail + 1)
+      expect(ctx.statuses.at(-1)).toBe('connecting')
+    })
+
+    it('отложенная попытка после пробуждения второго соединения не открывает', async () => {
+      const ctx = start()
+      await settle()
+      ctx.sources[0].open()
+      ctx.sources[0].fail()
+
+      ctx.advance(WAKE_STALE_MS + 1)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await settle()
+      const opened = ctx.sources.length
+
+      // Таймер, поставленный до пробуждения, срабатывает уже вхолостую.
+      ctx.timers.forEach((fire) => fire())
+      await settle()
+
+      expect(ctx.sources.length).toBe(opened)
+    })
+
+    it('живой поток не трогает: незачем рвать рабочее соединение', async () => {
+      const ctx = start()
+      await settle()
+      ctx.sources[0].open()
+      const opened = ctx.sources.length
+
+      document.dispatchEvent(new Event('visibilitychange'))
+      await settle()
+
+      expect(ctx.sources.length).toBe(opened)
+      expect(ctx.sources[0].closed).toBe(false)
+    })
+
+    it('после закрытия потока на пробуждение не реагирует', async () => {
+      const ctx = start()
+      await settle()
+      ctx.sources[0].open()
+      ctx.stream.close()
+      const opened = ctx.sources.length
+
+      ctx.advance(WAKE_STALE_MS + 1)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await settle()
+
+      expect(ctx.sources.length).toBe(opened)
+    })
   })
 
   it('считает поток живым, пока приходит ping', async () => {

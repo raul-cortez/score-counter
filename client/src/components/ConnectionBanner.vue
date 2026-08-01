@@ -13,8 +13,6 @@ defineProps<{ status: ConnectionStatus }>()
 <style scoped lang="scss">
 .banner {
   padding: 10px 16px;
-  /* Верхний правый угол занят кнопкой темы — не наезжаем на неё. */
-  margin-right: 56px;
   border-radius: 8px;
   text-align: center;
   font-size: 14px;
