@@ -50,7 +50,13 @@ export function game(over: Partial<GameDetails> = {}): GameDetails {
   }
 }
 
-export function roomState(over: Partial<RoomState> = {}): RoomState {
+/**
+ * Комнату переопределяют по одному полю — обычно чтобы поменять хоста, — поэтому
+ * `room` принимается частичным: остальное берётся из заготовки.
+ */
+export function roomState(
+  over: Partial<Omit<RoomState, 'room'>> & { room?: Partial<RoomState['room']> } = {},
+): RoomState {
   return {
     room: {
       id: 'r-1',

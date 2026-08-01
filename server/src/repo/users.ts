@@ -39,6 +39,17 @@ export function findUserByEmail(db: Db, email: string): UserRow | null {
   )
 }
 
+/**
+ * Имя меняется на месте, а не заводится второе.
+ *
+ * Записи очков ссылаются на пользователя, а не на имя, поэтому прошлые партии
+ * начинают показывать новое имя — так и задумано: в истории человек ищет себя
+ * по тому имени, каким его знают сейчас.
+ */
+export function renameUser(db: Db, userId: string, nickname: string): void {
+  db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run(nickname, userId)
+}
+
 export function attachEmail(db: Db, userId: string, email: string, passwordHash: string): void {
   db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(
     email,

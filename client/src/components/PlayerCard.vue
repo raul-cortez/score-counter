@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PublicUser } from '@score/shared'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   player: PublicUser
@@ -25,7 +26,7 @@ const progress = computed(() => {
     <div class="progress-bar" :style="{ height: `${progress}%` }" />
 
     <span class="badges">
-      <span v-if="isHost" class="badge" title="Хост">👑</span>
+      <AppIcon v-if="isHost" class="badge" name="crown" :size="15" title="Хост" />
       <span class="dot" :class="{ on: online }" :title="online ? 'В сети' : 'Не в сети'" />
     </span>
 

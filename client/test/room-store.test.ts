@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useRoomStore } from '../src/stores/room.js'
+import { NOTICE_TTL_MS, useRoomStore } from '../src/stores/room.js'
 import { ANYA, BORIS, VERA, entry, game, roomState } from './fixtures.js'
 
 beforeEach(() => {
@@ -120,5 +120,78 @@ describe('стор комнаты', () => {
     expect(store.state).toBeNull()
     expect(store.notices).toEqual([])
     expect(store.status).toBe('offline')
+  })
+})
+
+describe('уведомления уходят сами', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function joined(store: ReturnType<typeof useRoomStore>, seq: number): void {
+    store.apply({
+      type: 'member_joined',
+      seq,
+      payload: { userId: BORIS.id },
+      state: roomState(),
+    })
+  }
+
+  it('снимаются через отведённый срок без единого клика', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+    joined(store, 2)
+    expect(store.notices).toHaveLength(1)
+
+    vi.advanceTimersByTime(NOTICE_TTL_MS - 1)
+    expect(store.notices).toHaveLength(1)
+
+    vi.advanceTimersByTime(1)
+    expect(store.notices).toHaveLength(0)
+  })
+
+  it('каждое живёт свой срок, а не гаснет вместе с соседом', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+
+    joined(store, 2)
+    vi.advanceTimersByTime(NOTICE_TTL_MS - 1000)
+    joined(store, 3)
+
+    vi.advanceTimersByTime(1000)
+    expect(store.notices).toHaveLength(1)
+
+    vi.advanceTimersByTime(NOTICE_TTL_MS - 1000)
+    expect(store.notices).toHaveLength(0)
+  })
+
+  it('клик убирает раньше срока и не оставляет таймер на чужое место', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+    joined(store, 2)
+
+    store.dismiss(store.notices[0].id)
+    expect(store.notices).toHaveLength(0)
+
+    joined(store, 3)
+    vi.advanceTimersByTime(NOTICE_TTL_MS - 1)
+    // Таймер снятого уведомления не должен погасить следующее раньше времени.
+    expect(store.notices).toHaveLength(1)
+  })
+
+  it('выход из комнаты не оставляет тикающих таймеров', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+    joined(store, 2)
+
+    store.reset()
+    joined(store, 3)
+
+    vi.advanceTimersByTime(NOTICE_TTL_MS - 1)
+    expect(store.notices).toHaveLength(1)
   })
 })

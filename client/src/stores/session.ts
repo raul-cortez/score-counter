@@ -52,5 +52,10 @@ export const useSessionStore = defineStore('session', () => {
     user.value = await api.get<CurrentUser>('/me')
   }
 
-  return { user, restored, restore, loginAsGuest, refresh, forget }
+  /** Имя меняется у пользователя, поэтому одного ответа хватает: комнате сервер скажет сам. */
+  async function rename(nickname: string): Promise<void> {
+    user.value = await api.post<CurrentUser>('/me/nickname', { nickname })
+  }
+
+  return { user, restored, restore, loginAsGuest, rename, refresh, forget }
 })

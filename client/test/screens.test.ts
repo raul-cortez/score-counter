@@ -4,7 +4,7 @@ import GameScreen from '../src/components/GameScreen.vue'
 import EntriesLog from '../src/components/EntriesLog.vue'
 import WaitingRoom from '../src/components/WaitingRoom.vue'
 import VictoryScreen from '../src/components/VictoryScreen.vue'
-import { ANYA, BORIS, entry, game, roomState } from './fixtures.js'
+import { ANYA, BORIS, VERA, entry, game, roomState } from './fixtures.js'
 
 /**
  * Экраны собираются из настоящих ответов сервера.
@@ -61,16 +61,70 @@ describe('табло', () => {
   })
 
   // Обычный игрок пишет только себе — как и разрешает сервер.
-  it('не даёт обычному игроку выбрать чужую карточку', async () => {
+  it('обычному игроку открывает поле сразу: выбирать ему всё равно некого', () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: BORIS.id, busy: false },
+    })
+
+    expect(screen.find('.points-input').exists()).toBe(true)
+    expect(screen.find('.for-whom').text()).toBe('Ваши очки')
+  })
+
+  it('не даёт обычному игроку переключиться на чужую карточку', async () => {
     const screen = mount(GameScreen, {
       props: { state, game: current, meId: BORIS.id, busy: false },
     })
 
     await screen.findAll('.card-root')[0].trigger('click')
-    expect(screen.find('.points-input').exists()).toBe(false)
+    await screen.find('.points-input').setValue('25')
+    await screen.find('.btn-add').trigger('click')
 
-    await screen.findAll('.card-root')[1].trigger('click')
+    // Нажатие на Аню ничего не переключило: очки ушли себе.
+    expect(screen.emitted('addPoints')).toEqual([[BORIS.id, 25]])
+  })
+
+  it('после записи оставляет поле открытым — впереди следующая раздача', async () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: BORIS.id, busy: false },
+    })
+
+    await screen.find('.points-input').setValue('25')
+    await screen.find('.btn-add').trigger('click')
+
     expect(screen.find('.points-input').exists()).toBe(true)
+    expect((screen.find('.points-input').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('хосту поле само не открывает: ему сначала выбрать, кому писать', () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: ANYA.id, busy: false },
+    })
+
+    expect(screen.find('.points-input').exists()).toBe(false)
+    expect(screen.find('.pick-hint').text()).toContain('Нажмите на игрока')
+  })
+
+  it('зрителю не показывает поле вовсе', () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: VERA.id, busy: false },
+    })
+
+    expect(screen.find('.points-input').exists()).toBe(false)
+    expect(screen.find('.pick-hint').text()).toContain('не в составе')
+  })
+
+  it('роль сменилась посреди партии — поле перестаёт быть закреплённым', async () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: BORIS.id, busy: false },
+    })
+    expect(screen.find('.points-input').exists()).toBe(true)
+
+    // Хост ушёл, роль перешла Борису: теперь он выбирает, кому писать.
+    await screen.setProps({
+      state: roomState({ online: [ANYA.id], room: { hostUserId: BORIS.id } }),
+    })
+
+    expect(screen.find('.points-input').exists()).toBe(false)
   })
 
   it('сообщает наружу, кому и сколько записали', async () => {
@@ -117,22 +171,43 @@ describe('журнал раздач', () => {
     busy: false,
   })
 
-  it('показывает и отменённые записи тоже', () => {
+  /** Журнал свёрнут: до записей в нём сначала нужно добраться, как и на экране. */
+  async function openedLog(meId: string) {
+    const log = mount(EntriesLog, { props: props(meId) })
+    await log.find('.title').trigger('click')
+    return log
+  }
+
+  it('держит журнал свёрнутым, пока его не открыли', async () => {
     const log = mount(EntriesLog, { props: props(ANYA.id) })
+
+    expect(log.find('.title').attributes('aria-expanded')).toBe('false')
+    expect(log.find('.body').classes()).not.toContain('open')
+    // Сколько там записей, видно и в свёрнутом виде.
+    expect(log.find('.count').text()).toBe('2')
+
+    await log.find('.title').trigger('click')
+
+    expect(log.find('.title').attributes('aria-expanded')).toBe('true')
+    expect(log.find('.body').classes()).toContain('open')
+  })
+
+  it('показывает и отменённые записи тоже', async () => {
+    const log = await openedLog(ANYA.id)
 
     expect(log.findAll('.row')).toHaveLength(2)
     expect(log.text()).toContain('отменено')
   })
 
-  it('не предлагает трогать уже отменённую запись', () => {
-    const log = mount(EntriesLog, { props: props(ANYA.id) })
+  it('не предлагает трогать уже отменённую запись', async () => {
+    const log = await openedLog(ANYA.id)
     const voided = log.findAll('.row').find((row) => row.classes('voided'))!
 
     expect(voided.findAll('.btn-tiny')).toHaveLength(0)
   })
 
   it('правит запись, сохраняя нового значения', async () => {
-    const log = mount(EntriesLog, { props: props(ANYA.id) })
+    const log = await openedLog(ANYA.id)
     const live = log.findAll('.row').find((row) => !row.classes('voided'))!
 
     await live.findAll('.btn-tiny')[0].trigger('click')
@@ -143,7 +218,7 @@ describe('журнал раздач', () => {
   })
 
   it('отменяет запись', async () => {
-    const log = mount(EntriesLog, { props: props(ANYA.id) })
+    const log = await openedLog(ANYA.id)
     const live = log.findAll('.row').find((row) => !row.classes('voided'))!
 
     await live.findAll('.btn-tiny')[1].trigger('click')
@@ -151,8 +226,8 @@ describe('журнал раздач', () => {
     expect(log.emitted('voidEntry')).toEqual([['e-1']])
   })
 
-  it('не даёт обычному игроку править чужую запись', () => {
-    const log = mount(EntriesLog, { props: props(BORIS.id) })
+  it('не даёт обычному игроку править чужую запись', async () => {
+    const log = await openedLog(BORIS.id)
     const live = log.findAll('.row').find((row) => !row.classes('voided'))!
 
     expect(live.findAll('.btn-tiny')).toHaveLength(0)

@@ -22,6 +22,7 @@ export const FRAME_TYPES = [
   'presence',
   'member_joined',
   'member_left',
+  'member_renamed',
   'host_changed',
   'game_started',
   'game_finished',

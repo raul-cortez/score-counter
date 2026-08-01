@@ -6,6 +6,8 @@ import { useRoomStore } from '../stores/room.js'
 import { useSessionStore } from '../stores/session.js'
 import ConnectionBanner from '../components/ConnectionBanner.vue'
 import EntriesLog from '../components/EntriesLog.vue'
+import NicknameEditor from '../components/NicknameEditor.vue'
+import AppIcon from '../components/AppIcon.vue'
 import GameScreen from '../components/GameScreen.vue'
 import VictoryScreen from '../components/VictoryScreen.vue'
 import WaitingRoom from '../components/WaitingRoom.vue'
@@ -117,13 +119,32 @@ onUnmounted(() => room.disconnect())
     </div>
 
     <template v-else-if="room.state">
+      <!--
+        Выход переехал в шапку иконкой: раньше кнопка стояла в конце экрана и на
+        каждом состоянии комнаты в своём месте — за ней приходилось прокручивать.
+      -->
+      <Teleport to="#top-actions">
+        <button class="exit-btn" type="button" title="Выйти из комнаты" @click="leave">
+          <AppIcon name="exit" :size="18" />
+          <span class="visually-hidden">Выйти из комнаты</span>
+        </button>
+      </Teleport>
+
       <ConnectionBanner :status="room.status" />
 
-      <ul v-if="room.notices.length" class="notices">
-        <li v-for="item in room.notices" :key="item.id" @click="room.dismiss(item.id)">
+      <p class="me-line">Вы за столом как <NicknameEditor /></p>
+
+      <!-- Уведомления уходят сами через несколько секунд; клик убирает раньше. -->
+      <TransitionGroup tag="ul" name="notice" class="notices">
+        <li
+          v-for="item in room.notices"
+          :key="item.id"
+          title="Убрать"
+          @click="room.dismiss(item.id)"
+        >
           {{ item.text }}
         </li>
-      </ul>
+      </TransitionGroup>
 
       <p v-if="error" class="error">{{ error }}</p>
 
@@ -134,7 +155,6 @@ onUnmounted(() => room.disconnect())
         :me-id="meId"
         :busy="busy"
         @play-again="(limit) => guard(() => room.startGame(code, limit))"
-        @leave="leave"
       />
 
       <template v-else-if="showBoard && game">
@@ -154,7 +174,6 @@ onUnmounted(() => room.disconnect())
           @void-entry="(id) => guard(() => room.voidEntry(id))"
           @replace-entry="(id, points) => guard(() => room.replaceEntry(id, points))"
         />
-        <button class="btn-quiet" @click="leave">Выйти из комнаты</button>
       </template>
 
       <WaitingRoom
@@ -164,7 +183,6 @@ onUnmounted(() => room.disconnect())
         :default-limit="defaultLimit"
         :busy="busy"
         @start="(limit) => guard(() => room.startGame(code, limit))"
-        @leave="leave"
       />
     </template>
 
@@ -193,6 +211,57 @@ onUnmounted(() => room.disconnect())
   align-items: center;
   justify-content: center;
   gap: 12px;
+  color: var(--text-muted);
+}
+
+/*
+ * Кнопка живёт в шапке приложения (телепорт), поэтому размером и рамкой повторяет
+ * переключатель темы — они стоят рядом и должны читаться как одна пара.
+ */
+.exit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+
+  &:hover {
+    border-color: var(--border-hover);
+    color: var(--text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--btn-bg);
+    outline-offset: 3px;
+  }
+}
+
+/** Подпись для экранного диктора: иконка без слов ему ничего не говорит. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/** Своё имя под рукой прямо в комнате: за столом его правят на ходу. */
+.me-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 14px;
   color: var(--text-muted);
 }
 
@@ -261,12 +330,16 @@ onUnmounted(() => room.disconnect())
 }
 
 .notices {
+  position: relative;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Верхний правый угол занят кнопкой темы — не наезжаем на неё. */
-  padding-right: 56px;
+
+  /* Пустой список не должен раздвигать колонку своим зазором. */
+  &:empty {
+    display: none;
+  }
 }
 
 .notices li {
@@ -277,6 +350,48 @@ onUnmounted(() => room.disconnect())
   font-size: 13px;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+/*
+ * Появление и уход заметны, но не затянуты: уведомление, которое молча исчезает,
+ * читается как сбой отрисовки, а долгое — задерживает следующее.
+ */
+.notice-enter-active,
+.notice-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.notice-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.notice-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
+
+/*
+ * Уходящее вынимается из потока, иначе оставшиеся прыгают вверх рывком. Ширину
+ * при этом задаём руками: у элемента вне потока её больше не от кого унаследовать.
+ */
+.notice-leave-active {
+  position: absolute;
+  width: 100%;
+}
+
+.notice-move {
+  transition: transform 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-enter-active,
+  .notice-leave-active,
+  .notice-move {
+    transition: none;
+  }
 }
 
 .back {

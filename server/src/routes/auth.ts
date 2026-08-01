@@ -4,9 +4,10 @@ import {
   toPublicUser,
   findUserByEmail,
   attachEmail,
+  renameUser,
 } from '../repo/users.js'
 import { createSession } from '../repo/sessions.js'
-import { findActiveRoomCode } from '../repo/rooms.js'
+import { findActiveRoomCode, findRoomByCode } from '../repo/rooms.js'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
 
 const guestSchema = {
@@ -45,10 +46,46 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { nickname: string } }>(
     '/auth/guest',
     { schema: guestSchema },
-    async (req) => {
-      const user = createGuest(app.db, req.body.nickname.trim())
+    async (req, reply) => {
+      const nickname = req.body.nickname.trim()
+      if (nickname === '') return reply.code(400).send({ error: 'bad_nickname' })
+
+      const user = createGuest(app.db, nickname)
       const token = createSession(app.db, user.id)
       return { token, user: toPublicUser(user) }
+    },
+  )
+
+  /**
+   * Смена имени.
+   *
+   * Имя живёт у пользователя, а не в комнате, поэтому меняется везде сразу —
+   * и в составе, и в раздачах, и в прошлых партиях. Тем, кто сидит за столом,
+   * новое имя нужно немедленно, иначе они будут искать в списке старое: пока
+   * человек в комнате, рассылаем ей событие.
+   */
+  app.post<{ Body: { nickname: string } }>(
+    '/me/nickname',
+    { schema: guestSchema, preHandler: app.requireAuth },
+    async (req, reply) => {
+      const user = req.currentUser!
+      const nickname = req.body.nickname.trim()
+      if (nickname === '') return reply.code(400).send({ error: 'bad_nickname' })
+
+      renameUser(app.db, user.id, nickname)
+
+      const activeRoomCode = findActiveRoomCode(app.db, user.id)
+      const room = activeRoomCode === null ? null : findRoomByCode(app.db, activeRoomCode)
+      if (room !== null) {
+        app.mutateRoom(room.id, () => [
+          {
+            type: 'member_renamed',
+            payload: { userId: user.id, nickname, previous: user.nickname },
+          },
+        ])
+      }
+
+      return { ...toPublicUser({ ...user, nickname }), activeRoomCode }
     },
   )
 

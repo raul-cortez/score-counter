@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useLobbyStore } from '../stores/lobby.js'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
+import NicknameEditor from '../components/NicknameEditor.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const lobby = useLobbyStore()
 const session = useSessionStore()
@@ -45,7 +47,7 @@ async function create(): Promise<void> {
     <header class="head">
       <h1 class="title">Комнаты</h1>
       <span class="me">
-        {{ session.user?.nickname }}
+        <NicknameEditor />
         <RouterLink class="history-link" to="/history">мои игры</RouterLink>
       </span>
     </header>
@@ -89,7 +91,7 @@ async function create(): Promise<void> {
         <RouterLink class="room" :to="`/room/${room.code}`">
           <span class="room-name">{{ room.name }}</span>
           <span class="room-meta">
-            <span v-if="room.hasPassword" title="Нужен пароль">🔒</span>
+            <AppIcon v-if="room.hasPassword" name="lock" :size="15" title="Нужен пароль" />
             <span>{{ room.memberCount }} чел.</span>
             <span v-if="room.gameActive" class="playing">идёт игра</span>
           </span>
@@ -115,7 +117,6 @@ async function create(): Promise<void> {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding-right: 56px;
 }
 
 .title {
@@ -169,13 +170,21 @@ async function create(): Promise<void> {
   }
 }
 
+/*
+ * Ширину делят только кнопки в паре. Раньше `flex: 1` стоял на самой кнопке, и
+ * «Создать комнату» — она лежит прямо в колонке экрана — растягивалась на всю
+ * свободную высоту, закрывая собой список комнат.
+ */
 .row {
   display: flex;
   gap: 8px;
+
+  > * {
+    flex: 1;
+  }
 }
 
 .btn-primary {
-  flex: 1;
   padding: 12px 24px;
   background: var(--btn-bg);
   color: var(--btn-text);

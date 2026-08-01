@@ -6,6 +6,7 @@ import { useHistoryStore } from '../stores/history.js'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
 import { formatPlayedAt } from '../formatDate.js'
+import AppIcon from '../components/AppIcon.vue'
 
 const history = useHistoryStore()
 const session = useSessionStore()
@@ -44,7 +45,7 @@ onMounted(async () => {
 <template>
   <div class="detail-root">
     <header class="head">
-      <RouterLink class="back" to="/history">← Мои игры</RouterLink>
+      <RouterLink class="back" to="/history"><AppIcon name="back" :size="16" />Мои игры</RouterLink>
       <h1 v-if="game" class="title">{{ game.roomName }}</h1>
     </header>
 
@@ -62,7 +63,7 @@ onMounted(async () => {
           <span class="nick">
             {{ player.nickname }}
             <span v-if="player.id === session.user?.id" class="you">вы</span>
-            <span v-if="player.id === game.winnerUserId" title="Победитель">🏆</span>
+            <AppIcon v-if="player.id === game.winnerUserId" name="trophy" :size="16" title="Победитель" />
           </span>
           <span class="place-score">{{ game.scores[player.id] ?? 0 }}</span>
         </li>

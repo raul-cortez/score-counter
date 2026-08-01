@@ -5,6 +5,7 @@ import { useHistoryStore } from '../stores/history.js'
 import { useSessionStore } from '../stores/session.js'
 import { describeError } from '../api.js'
 import { formatPlayedAt } from '../formatDate.js'
+import AppIcon from '../components/AppIcon.vue'
 
 const history = useHistoryStore()
 const session = useSessionStore()
@@ -36,7 +37,7 @@ function opponents(game: GameHistoryItem): string {
 <template>
   <div class="history-root">
     <header class="head">
-      <RouterLink class="back" to="/">← Лобби</RouterLink>
+      <RouterLink class="back" to="/"><AppIcon name="back" :size="16" />Лобби</RouterLink>
       <h1 class="title">Мои игры</h1>
     </header>
 

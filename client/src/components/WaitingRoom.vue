@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { RoomState } from '@score/shared'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   state: RoomState
@@ -10,7 +11,7 @@ const props = defineProps<{
   busy: boolean
 }>()
 
-const emit = defineEmits<{ start: [scoreLimit: number]; leave: [] }>()
+const emit = defineEmits<{ start: [scoreLimit: number] }>()
 
 const scoreLimit = ref(props.defaultLimit)
 const copied = ref(false)
@@ -36,7 +37,7 @@ async function copyInvite(): Promise<void> {
       <li v-for="member in state.members" :key="member.id" class="member">
         <span class="dot" :class="{ on: state.online.includes(member.id) }" />
         <span class="nick">{{ member.nickname }}</span>
-        <span v-if="member.id === state.room.hostUserId" title="Хост">👑</span>
+        <AppIcon v-if="member.id === state.room.hostUserId" name="crown" :size="15" title="Хост" />
         <span v-if="member.id === meId" class="you">вы</span>
       </li>
     </ul>
@@ -60,7 +61,6 @@ async function copyInvite(): Promise<void> {
     </template>
     <p v-else class="hint">Ждём, пока хост начнёт игру.</p>
 
-    <button class="btn-quiet" @click="emit('leave')">Выйти из комнаты</button>
   </div>
 </template>
 

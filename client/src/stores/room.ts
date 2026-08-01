@@ -8,6 +8,15 @@ import { openRoomStream, type ConnectionStatus, type Stream } from '../realtime.
 export type Notice = { id: number; text: string }
 
 /**
+ * Сколько уведомление висит само по себе.
+ *
+ * Раньше оно не уходило вообще, пока по нему не ткнут, и к середине партии экран
+ * был заклеен сообщениями о входах и выходах. Пяти секунд хватает, чтобы прочитать
+ * фразу в четыре слова, и мало, чтобы она успела помешать.
+ */
+export const NOTICE_TTL_MS = 5000
+
+/**
  * Состояние комнаты.
  *
  * Каждый кадр из потока несёт готовый снимок, поэтому стор его заменяет целиком и
@@ -21,6 +30,8 @@ export const useRoomStore = defineStore('room', () => {
 
   let stream: Stream | null = null
   let noticeSeq = 0
+  /** Таймеры снятия: держим, чтобы уход из комнаты не оставил их тикать в пустоту. */
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
 
   const nicknames = computed<Record<string, string>>(() => {
     const known: Record<string, string> = {}
@@ -39,10 +50,20 @@ export const useRoomStore = defineStore('room', () => {
 
   function notice(text: string): void {
     noticeSeq += 1
-    notices.value = [...notices.value.slice(-4), { id: noticeSeq, text }]
+    const id = noticeSeq
+    notices.value = [...notices.value.slice(-4), { id, text }]
+    timers.set(
+      id,
+      setTimeout(() => dismiss(id), NOTICE_TTL_MS),
+    )
   }
 
   function dismiss(id: number): void {
+    const timer = timers.get(id)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timers.delete(id)
+    }
     notices.value = notices.value.filter((item) => item.id !== id)
   }
 
@@ -52,6 +73,12 @@ export const useRoomStore = defineStore('room', () => {
         return `${nameOf((frame.payload as { userId: string }).userId)} в комнате`
       case 'member_left':
         return `${nameOf((frame.payload as { userId: string }).userId)} вышел`
+      case 'member_renamed': {
+        // Имя в снимке уже новое, поэтому старое берём из события — иначе фраза
+        // получилась бы «Аня теперь Аня».
+        const { previous, nickname } = frame.payload as { previous: string; nickname: string }
+        return `${previous} теперь ${nickname}`
+      }
       case 'host_changed':
         return `${nameOf((frame.payload as { hostUserId: string }).hostUserId)} теперь хост`
       case 'entry_voided':
@@ -114,6 +141,8 @@ export const useRoomStore = defineStore('room', () => {
   function reset(): void {
     disconnect()
     state.value = null
+    for (const timer of timers.values()) clearTimeout(timer)
+    timers.clear()
     notices.value = []
   }
 

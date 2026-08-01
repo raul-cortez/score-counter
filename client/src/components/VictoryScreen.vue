@@ -9,7 +9,7 @@ const props = defineProps<{
   busy: boolean
 }>()
 
-const emit = defineEmits<{ playAgain: [scoreLimit: number]; leave: [] }>()
+const emit = defineEmits<{ playAgain: [scoreLimit: number] }>()
 
 const scoreLimit = ref(props.game.scoreLimit)
 
@@ -58,7 +58,6 @@ const standings = computed(() =>
       </template>
       <p v-else class="hint">Хост может начать новую игру тем же составом.</p>
 
-      <button class="btn-quiet" @click="emit('leave')">Выйти из комнаты</button>
     </div>
   </div>
 </template>
