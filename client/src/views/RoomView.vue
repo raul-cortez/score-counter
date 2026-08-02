@@ -131,17 +131,31 @@ onUnmounted(() => room.disconnect())
 
       <ConnectionBanner :status="room.status" />
 
-      <!-- Уведомления уходят сами через несколько секунд; клик убирает раньше. -->
-      <TransitionGroup tag="ul" name="notice" class="notices">
-        <li
-          v-for="item in room.notices"
-          :key="item.id"
-          title="Убрать"
-          @click="room.dismiss(item.id)"
+      <!--
+        Уведомления всплывают снизу поверх экрана и уходят сами через несколько
+        секунд; клик убирает раньше. В потоке они раздвигали содержимое: табло
+        прыгало вниз, стоило кому-то войти в комнату посреди партии.
+
+        Когда идёт игра, стопка приподнята: внизу липнет панель ввода очков, и
+        плашка легла бы прямо на неё.
+      -->
+      <Teleport to="body">
+        <TransitionGroup
+          tag="ul"
+          name="notice"
+          class="notices"
+          :class="{ raised: showBoard }"
         >
-          {{ item.text }}
-        </li>
-      </TransitionGroup>
+          <li
+            v-for="item in room.notices"
+            :key="item.id"
+            title="Убрать"
+            @click="room.dismiss(item.id)"
+          >
+            {{ item.text }}
+          </li>
+        </TransitionGroup>
+      </Teleport>
 
       <p v-if="error" class="error">{{ error }}</p>
 
@@ -316,27 +330,41 @@ onUnmounted(() => room.disconnect())
   }
 }
 
+/*
+ * Стопка всплывающих плашек внизу экрана. Живёт вне потока страницы, поэтому
+ * ничего не двигает, и не перехватывает касания мимо самих плашек — под ними
+ * остаётся рабочий экран.
+ */
 .notices {
-  position: relative;
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  max-width: 520px;
+  margin: 0 auto;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  pointer-events: none;
+}
 
-  /* Пустой список не должен раздвигать колонку своим зазором. */
-  &:empty {
-    display: none;
-  }
+/* Панель ввода очков липнет к низу — освобождаем ей место. */
+.notices.raised {
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px));
 }
 
 .notices li {
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px var(--shadow);
   font-size: 13px;
   color: var(--text-muted);
   cursor: pointer;
+  pointer-events: auto;
 }
 
 /*
@@ -350,19 +378,20 @@ onUnmounted(() => room.disconnect())
     transform 0.25s ease;
 }
 
+/* Выезжает снизу — оттуда, где стоит стопка. */
 .notice-enter-from {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(12px);
 }
 
 .notice-leave-to {
   opacity: 0;
-  transform: translateX(16px);
+  transform: translateY(6px);
 }
 
 /*
- * Уходящее вынимается из потока, иначе оставшиеся прыгают вверх рывком. Ширину
- * при этом задаём руками: у элемента вне потока её больше не от кого унаследовать.
+ * Уходящее вынимается из потока, иначе оставшиеся прыгают рывком. Ширину при
+ * этом задаём руками: у элемента вне потока её больше не от кого унаследовать.
  */
 .notice-leave-active {
   position: absolute;
