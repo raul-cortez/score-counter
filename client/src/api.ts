@@ -28,6 +28,9 @@ const MESSAGES: Record<string, string> = {
   bad_player_count: 'играть можно вдвоём и больше',
   entry_already_voided: 'эта запись уже отменена',
   too_many_attempts: 'слишком много попыток, подождите немного',
+  bad_name: 'нужно название',
+  bad_nickname: 'нужно имя',
+  cannot_remove_host: 'хоста нельзя убрать из комнаты',
 }
 
 export function describeError(error: unknown): string {

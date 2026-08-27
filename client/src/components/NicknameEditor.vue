@@ -36,6 +36,28 @@ function cancel(): void {
   error.value = ''
 }
 
+/** Подставляет в поле одно из имён, которыми человек пользовался раньше, не отправляя его сразу. */
+async function pickRandom(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const nickname = await session.randomPastNickname()
+    if (nickname === null) {
+      error.value = 'Прошлых имён пока нет'
+      return
+    }
+    draft.value = nickname
+    await nextTick()
+    inputRef.value?.focus()
+    inputRef.value?.select()
+  } catch (err) {
+    error.value = describeError(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function save(): Promise<void> {
   const next = draft.value.trim()
   if (next === '' || busy.value) return
@@ -66,11 +88,20 @@ async function save(): Promise<void> {
         v-model="draft"
         class="name-field"
         type="text"
-        maxlength="20"
         placeholder="Имя"
         @keydown.enter="save"
         @keydown.esc="cancel"
       />
+      <button
+        class="btn-tiny"
+        type="button"
+        title="Взять одно из прошлых имён"
+        aria-label="Случайное прошлое имя"
+        :disabled="busy"
+        @click="pickRandom"
+      >
+        <AppIcon name="shuffle" :size="15" />
+      </button>
       <!--
         Подтверждение и отмена значками, а не словами: редактор живёт в шапке рядом
         с другими кнопками-иконками, и пара «Готово · Отмена» распирала строку так,

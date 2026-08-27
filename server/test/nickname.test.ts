@@ -141,3 +141,42 @@ describe('POST /api/me/nickname', () => {
     expect(res.json().activeRoomCode).toBe(code)
   })
 })
+
+describe('GET /api/me/nickname/random', () => {
+  it('без истории отдаёт null', async () => {
+    const guest = await createGuestSession(ctx.app, 'Аня')
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/me/nickname/random',
+      headers: bearer(guest),
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ nickname: null })
+  })
+
+  it('отдаёт прошлое имя, но не текущее', async () => {
+    const guest = await createGuestSession(ctx.app, 'Аня')
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/api/me/nickname',
+      headers: bearer(guest),
+      payload: { nickname: 'Анна Петровна' },
+    })
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/me/nickname/random',
+      headers: bearer(guest),
+    })
+
+    expect(res.json()).toEqual({ nickname: 'Аня' })
+  })
+
+  it('не пускает без токена', async () => {
+    const res = await ctx.app.inject({ method: 'GET', url: '/api/me/nickname/random' })
+
+    expect(res.statusCode).toBe(401)
+  })
+})

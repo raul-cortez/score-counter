@@ -26,6 +26,7 @@ export function createGuest(db: Db, nickname: string): UserRow {
     `INSERT INTO users (id, nickname, email, password_hash, created_at)
      VALUES (@id, @nickname, @email, @password_hash, @created_at)`,
   ).run(row)
+  recordNicknameHistory(db, row.id, nickname)
   return row
 }
 
@@ -48,6 +49,25 @@ export function findUserByEmail(db: Db, email: string): UserRow | null {
  */
 export function renameUser(db: Db, userId: string, nickname: string): void {
   db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run(nickname, userId)
+  recordNicknameHistory(db, userId, nickname)
+}
+
+function recordNicknameHistory(db: Db, userId: string, nickname: string): void {
+  db.prepare(
+    'INSERT INTO nickname_history (user_id, nickname, created_at) VALUES (?, ?, ?)',
+  ).run(userId, nickname, Date.now())
+}
+
+/** Одно из имён, которыми пользователь раньше пользовался, но не то, что сейчас — для кнопки «взять старое имя». */
+export function randomPastNickname(db: Db, userId: string, currentNickname: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT DISTINCT nickname FROM nickname_history
+       WHERE user_id = ? AND nickname != ?
+       ORDER BY RANDOM() LIMIT 1`,
+    )
+    .get(userId, currentNickname) as { nickname: string } | undefined
+  return row?.nickname ?? null
 }
 
 export function attachEmail(db: Db, userId: string, email: string, passwordHash: string): void {

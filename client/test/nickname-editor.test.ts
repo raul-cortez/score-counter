@@ -6,9 +6,10 @@ import { useSessionStore } from '../src/stores/session.js'
 
 /** Настоящих запросов в тесте не делаем: проверяется, что и когда компонент зовёт. */
 const post = vi.fn()
+const get = vi.fn()
 vi.mock('../src/api.js', () => ({
   api: {
-    get: (...args: unknown[]) => Promise.reject(new Error(`неожиданный GET ${String(args[0])}`)),
+    get: (...args: unknown[]) => get(...args),
     post: (...args: unknown[]) => post(...args),
   },
   setToken: () => undefined,
@@ -19,6 +20,8 @@ beforeEach(() => {
   setActivePinia(createPinia())
   post.mockReset()
   post.mockResolvedValue({ id: 'u-anya', nickname: 'Аня Б.', hasEmail: false, activeRoomCode: null })
+  get.mockReset()
+  get.mockResolvedValue({ nickname: null })
 })
 
 function editorWithUser() {
@@ -40,7 +43,7 @@ describe('смена имени', () => {
 
     await editor.find('.current').trigger('click')
     await editor.find('.name-field').setValue('Аня Б.')
-    await editor.findAll('.btn-tiny')[0].trigger('click')
+    await editor.find('[title="Готово"]').trigger('click')
     await flushPromises()
 
     expect(post).toHaveBeenCalledWith('/me/nickname', { nickname: 'Аня Б.' })
@@ -53,7 +56,7 @@ describe('смена имени', () => {
 
     await editor.find('.current').trigger('click')
     await editor.find('.name-field').setValue('Аня')
-    await editor.findAll('.btn-tiny')[0].trigger('click')
+    await editor.find('[title="Готово"]').trigger('click')
 
     expect(post).not.toHaveBeenCalled()
   })
@@ -63,7 +66,7 @@ describe('смена имени', () => {
 
     await editor.find('.current').trigger('click')
     await editor.find('.name-field').setValue('   ')
-    await editor.findAll('.btn-tiny')[0].trigger('click')
+    await editor.find('[title="Готово"]').trigger('click')
 
     expect(post).not.toHaveBeenCalled()
   })
@@ -73,9 +76,35 @@ describe('смена имени', () => {
 
     await editor.find('.current').trigger('click')
     await editor.find('.name-field').setValue('Другое')
-    await editor.findAll('.btn-tiny')[1].trigger('click')
+    await editor.find('[title="Отмена"]').trigger('click')
 
     expect(post).not.toHaveBeenCalled()
     expect(editor.text()).toContain('Аня')
+  })
+})
+
+describe('случайное прошлое имя', () => {
+  it('подставляет в поле имя, которое вернул сервер, не отправляя его', async () => {
+    get.mockResolvedValue({ nickname: 'Старое имя' })
+    const { editor } = editorWithUser()
+
+    await editor.find('.current').trigger('click')
+    await editor.find('[title="Взять одно из прошлых имён"]').trigger('click')
+    await flushPromises()
+
+    expect(get).toHaveBeenCalledWith('/me/nickname/random')
+    expect((editor.find('.name-field').element as HTMLInputElement).value).toBe('Старое имя')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('сообщает, если прошлых имён ещё не было', async () => {
+    get.mockResolvedValue({ nickname: null })
+    const { editor } = editorWithUser()
+
+    await editor.find('.current').trigger('click')
+    await editor.find('[title="Взять одно из прошлых имён"]').trigger('click')
+    await flushPromises()
+
+    expect(editor.text()).toContain('Прошлых имён пока нет')
   })
 })

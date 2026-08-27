@@ -39,14 +39,16 @@ describe('POST /api/auth/guest', () => {
     expect(res.statusCode).toBe(400)
   })
 
-  it('отклоняет ник длиннее 20 символов', async () => {
+  it('не ограничивает длину ника', async () => {
+    const long = 'я'.repeat(200)
     const res = await ctx.app.inject({
       method: 'POST',
       url: '/api/auth/guest',
-      payload: { nickname: 'я'.repeat(21) },
+      payload: { nickname: long },
     })
 
-    expect(res.statusCode).toBe(400)
+    expect(res.statusCode).toBe(200)
+    expect(res.json().user.nickname).toBe(long)
   })
 
   it('не хранит сырой токен в базе', async () => {

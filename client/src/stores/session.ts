@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CurrentUser } from '@score/shared'
+import type { CurrentUser, NicknameSuggestion } from '@score/shared'
 import { api, setToken } from '../api.js'
 
 const TOKEN_KEY = 'score-counter-token'
@@ -57,5 +57,11 @@ export const useSessionStore = defineStore('session', () => {
     user.value = await api.post<CurrentUser>('/me/nickname', { nickname })
   }
 
-  return { user, restored, restore, loginAsGuest, rename, refresh, forget }
+  /** Для кнопки «взять старое имя»: `null`, если пользователь ещё ни разу не менял ник. */
+  async function randomPastNickname(): Promise<string | null> {
+    const res = await api.get<NicknameSuggestion>('/me/nickname/random')
+    return res.nickname
+  }
+
+  return { user, restored, restore, loginAsGuest, rename, randomPastNickname, refresh, forget }
 })

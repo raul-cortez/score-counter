@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS score_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_entries_game ON score_entries(game_id, seq);
 
+CREATE TABLE IF NOT EXISTS nickname_history (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  nickname   TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_nickname_history_user ON nickname_history(user_id);
+
 CREATE TABLE IF NOT EXISTS room_events (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
   room_id    TEXT NOT NULL REFERENCES rooms(id),

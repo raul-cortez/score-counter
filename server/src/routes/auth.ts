@@ -5,6 +5,7 @@ import {
   findUserByEmail,
   attachEmail,
   renameUser,
+  randomPastNickname,
 } from '../repo/users.js'
 import { createSession } from '../repo/sessions.js'
 import { findActiveRoomCode, findRoomByCode } from '../repo/rooms.js'
@@ -16,7 +17,7 @@ const guestSchema = {
     required: ['nickname'],
     additionalProperties: false,
     properties: {
-      nickname: { type: 'string', minLength: 1, maxLength: 20 },
+      nickname: { type: 'string', minLength: 1 },
     },
   },
 }
@@ -127,5 +128,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       ...toPublicUser(user),
       activeRoomCode: findActiveRoomCode(app.db, user.id),
     }
+  })
+
+  /** Для кнопки «взять старое имя» рядом с редактором ника. */
+  app.get('/me/nickname/random', { preHandler: app.requireAuth }, async (req) => {
+    const user = req.currentUser!
+    return { nickname: randomPastNickname(app.db, user.id, user.nickname) }
   })
 }

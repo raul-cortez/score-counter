@@ -11,6 +11,11 @@ export type CurrentUser = PublicUser & {
   activeRoomCode: string | null
 }
 
+/** Ответ на запрос случайного прошлого ника: `null`, если история пуста. */
+export type NicknameSuggestion = {
+  nickname: string | null
+}
+
 export type ScoreEntry = {
   seq: number
   id: string
