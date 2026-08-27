@@ -120,6 +120,47 @@ describe('стор комнаты', () => {
     expect(store.state).toBeNull()
     expect(store.notices).toEqual([])
     expect(store.status).toBe('offline')
+    expect(store.lastEvent).toBeNull()
+  })
+
+  it('сообщает о переименовании комнаты', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+
+    store.apply({
+      type: 'room_renamed',
+      seq: 2,
+      payload: { name: 'Новое имя', previous: 'Преферанс' },
+      state: roomState({ room: { name: 'Новое имя' } }),
+    })
+
+    expect(store.notices.at(-1)!.text).toContain('Преферанс')
+    expect(store.notices.at(-1)!.text).toContain('Новое имя')
+  })
+
+  it('запоминает закрытие комнаты как последнее событие, чтобы экран мог увести из неё', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState() })
+
+    store.apply({ type: 'room_closed', seq: 2, payload: {}, state: roomState() })
+
+    expect(store.lastEvent).toEqual({ type: 'room_closed', payload: {} })
+    expect(store.notices.at(-1)!.text).toContain('удалил')
+  })
+
+  it('называет по имени того, кого убрал хост', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState({ members: [ANYA, BORIS] }) })
+
+    store.apply({
+      type: 'member_removed',
+      seq: 2,
+      payload: { userId: BORIS.id },
+      state: roomState({ members: [ANYA] }),
+    })
+
+    expect(store.lastEvent).toEqual({ type: 'member_removed', payload: { userId: BORIS.id } })
+    expect(store.notices.at(-1)!.text).toContain('Борис')
   })
 })
 

@@ -105,6 +105,19 @@ export function setHost(db: Db, roomId: string, userId: string): void {
   db.prepare('UPDATE rooms SET host_user_id = ? WHERE id = ?').run(userId, roomId)
 }
 
+export function renameRoom(db: Db, roomId: string, name: string): void {
+  db.prepare('UPDATE rooms SET name = ? WHERE id = ?').run(name, roomId)
+}
+
+/**
+ * Мягкое закрытие, а не удаление строки: партии и записи очков ссылаются на комнату,
+ * и им незачем лишаться истории вместе с ней. `closed_at` уже отрезает комнату
+ * от списка открытых, входа и снимка — см. requireOpenRoom в routes/rooms.ts.
+ */
+export function closeRoom(db: Db, roomId: string): void {
+  db.prepare('UPDATE rooms SET closed_at = ? WHERE id = ?').run(Date.now(), roomId)
+}
+
 export function removeMember(db: Db, roomId: string, userId: string): void {
   db.prepare('UPDATE room_members SET left_at = ? WHERE room_id = ? AND user_id = ?').run(
     Date.now(),

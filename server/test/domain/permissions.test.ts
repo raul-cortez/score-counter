@@ -3,6 +3,7 @@ import {
   canAddEntryFor,
   canVoidEntry,
   canStartGame,
+  canManageRoom,
   type PermissionContext,
 } from '../../src/domain/permissions.js'
 
@@ -62,5 +63,15 @@ describe('canStartGame', () => {
 
   it('запрещает не-хосту', () => {
     expect(canStartGame(asBoris)).toBe(false)
+  })
+})
+
+describe('canManageRoom', () => {
+  it('разрешает хосту переименовывать/закрывать комнату и управлять составом', () => {
+    expect(canManageRoom('anya', 'anya')).toBe(true)
+  })
+
+  it('запрещает не-хосту', () => {
+    expect(canManageRoom('boris', 'anya')).toBe(false)
   })
 })

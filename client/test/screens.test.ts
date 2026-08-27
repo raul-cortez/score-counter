@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import GameScreen from '../src/components/GameScreen.vue'
 import EntriesLog from '../src/components/EntriesLog.vue'
@@ -235,6 +235,10 @@ describe('журнал раздач', () => {
 })
 
 describe('зал ожидания', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('показывает состав и приглашает начать хоста', () => {
     const screen = mount(WaitingRoom, {
       props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
@@ -277,6 +281,81 @@ describe('зал ожидания', () => {
     await screen.find('.btn-primary').trigger('click')
 
     expect(screen.emitted('start')).toEqual([[250]])
+  })
+
+  it('хост переименовывает комнату', async () => {
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    await screen.find('[title="Переименовать комнату"]').trigger('click')
+    await screen.find('.name-field').setValue('Дурак на раздевание')
+    await screen.find('[title="Готово"]').trigger('click')
+
+    expect(screen.emitted('rename-room')).toEqual([['Дурак на раздевание']])
+  })
+
+  it('обычному игроку кнопки управления комнатой и составом не показывает', () => {
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: BORIS.id, defaultLimit: 100, busy: false },
+    })
+
+    expect(screen.find('[title="Переименовать комнату"]').exists()).toBe(false)
+    expect(screen.find('.danger').exists()).toBe(false)
+    expect(screen.find('[title="Убрать из комнаты"]').exists()).toBe(false)
+  })
+
+  it('хост не видит кнопок управления собой в списке участников', () => {
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    const own = screen.findAll('.member').find((row) => row.text().includes('Аня'))!
+    expect(own.find('[title="Убрать из комнаты"]').exists()).toBe(false)
+  })
+
+  it('хост удаляет комнату после подтверждения', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    await screen.find('.danger').trigger('click')
+
+    expect(screen.emitted('close-room')).toHaveLength(1)
+  })
+
+  it('отменённое подтверждение не удаляет комнату', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    await screen.find('.danger').trigger('click')
+
+    expect(screen.emitted('close-room')).toBeUndefined()
+  })
+
+  it('хост убирает участника после подтверждения', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    await screen.find('[title="Убрать из комнаты"]').trigger('click')
+
+    expect(screen.emitted('remove-member')).toEqual([[BORIS.id]])
+  })
+
+  it('хост переименовывает участника через системную подсказку', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Боря')
+    const screen = mount(WaitingRoom, {
+      props: { state: roomState({ game: null }), meId: ANYA.id, defaultLimit: 100, busy: false },
+    })
+
+    await screen.find('[title="Переименовать участника"]').trigger('click')
+
+    expect(screen.emitted('rename-member')).toEqual([[BORIS.id, 'Боря']])
   })
 })
 

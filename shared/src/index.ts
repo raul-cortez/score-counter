@@ -71,8 +71,11 @@ export type RoomState = {
 export type RoomEventType =
   | 'member_joined'
   | 'member_left'
+  | 'member_removed'
   | 'member_renamed'
   | 'host_changed'
+  | 'room_renamed'
+  | 'room_closed'
   | 'game_started'
   | 'game_finished'
   | 'entry_added'

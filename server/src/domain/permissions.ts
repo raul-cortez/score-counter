@@ -25,3 +25,8 @@ export function canVoidEntry(ctx: PermissionContext, entryOwnerId: string): bool
 export function canStartGame(ctx: PermissionContext): boolean {
   return ctx.actorId === ctx.hostId
 }
+
+/** Переименовать или закрыть комнату, убрать или переименовать участника — только хосту. */
+export function canManageRoom(actorId: string, hostId: string): boolean {
+  return actorId === hostId
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, api, describeError } from '../api.js'
 import { useRoomStore } from '../stores/room.js'
@@ -83,6 +83,14 @@ async function leave(): Promise<void> {
   })
 }
 
+async function closeRoom(): Promise<void> {
+  await guard(async () => {
+    await room.closeRoom(code)
+    room.reset()
+    await router.push('/')
+  })
+}
+
 onMounted(async () => {
   try {
     await enter()
@@ -96,6 +104,24 @@ onMounted(async () => {
 // Поток обязан закрыться при уходе со страницы, иначе на сервере копятся
 // соединения, а из-за них комната считает нас онлайн.
 onUnmounted(() => room.disconnect())
+
+/**
+ * Хост может закрыть комнату или убрать участника, пока тот сидит на экране.
+ * Собственные действия хоста ведут наружу сами (см. leave/close ниже), а вот
+ * закрытие чужой рукой и своё удаление узнаём только из потока.
+ */
+watch(
+  () => room.lastEvent,
+  (event) => {
+    if (!event) return
+    const iAmRemoved =
+      event.type === 'member_removed' && (event.payload as { userId: string }).userId === meId.value
+    if (event.type !== 'room_closed' && !iAmRemoved) return
+
+    room.reset()
+    router.push('/')
+  },
+)
 </script>
 
 <template>
@@ -194,6 +220,10 @@ onUnmounted(() => room.disconnect())
         :default-limit="defaultLimit"
         :busy="busy"
         @start="(limit) => guard(() => room.startGame(code, limit))"
+        @rename-room="(name) => guard(() => room.renameRoom(code, name))"
+        @close-room="closeRoom"
+        @remove-member="(userId) => guard(() => room.removeMember(code, userId))"
+        @rename-member="(userId, nickname) => guard(() => room.renameMember(code, userId, nickname))"
       />
     </template>
 

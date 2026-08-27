@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { PublicUser, RoomState, ServerFrame } from '@score/shared'
+import type { PublicUser, RoomEventType, RoomState, ServerFrame } from '@score/shared'
 import { api } from '../api.js'
 import { openRoomStream, type ConnectionStatus, type Stream } from '../realtime.js'
 
@@ -27,6 +27,14 @@ export const useRoomStore = defineStore('room', () => {
   const state = ref<RoomState | null>(null)
   const status = ref<ConnectionStatus>('offline')
   const notices = ref<Notice[]>([])
+  /**
+   * Последнее событие из потока, отдельно от снимка.
+   *
+   * Экран следит по нему за тем, что касается лично зашедшего — закрыли комнату или
+   * убрали его самого, — и уводит из комнаты. Разбирать это по тексту уведомления
+   * было бы хрупко, а держать такую логику в сторе — плодить в нём знание об экране.
+   */
+  const lastEvent = ref<{ type: RoomEventType; payload: unknown } | null>(null)
 
   let stream: Stream | null = null
   let noticeSeq = 0
@@ -83,6 +91,14 @@ export const useRoomStore = defineStore('room', () => {
         return `${nameOf((frame.payload as { hostUserId: string }).hostUserId)} теперь хост`
       case 'entry_voided':
         return `запись ${nameOf((frame.payload as { userId: string }).userId)} отменена`
+      case 'room_renamed': {
+        const { previous, name } = frame.payload as { previous: string; name: string }
+        return `Комната переименована: «${previous}» → «${name}»`
+      }
+      case 'room_closed':
+        return 'Хост удалил комнату'
+      case 'member_removed':
+        return `${nameOf((frame.payload as { userId: string }).userId)} удалён хостом`
       default:
         return null
     }
@@ -98,6 +114,7 @@ export const useRoomStore = defineStore('room', () => {
     state.value = frame.state
 
     if (frame.type === 'sync' || frame.type === 'presence') return
+    lastEvent.value = { type: frame.type, payload: frame.payload }
     const text = describe(frame)
     if (text !== null) notice(text)
   }
@@ -132,6 +149,13 @@ export const useRoomStore = defineStore('room', () => {
   const leave = (code: string) => act(`/rooms/${code}/leave`)
   const startGame = (code: string, scoreLimit: number) => act(`/rooms/${code}/games`, { scoreLimit })
 
+  const renameRoom = (code: string, name: string) => act(`/rooms/${code}/rename`, { name })
+  const closeRoom = (code: string) => act(`/rooms/${code}/close`)
+  const removeMember = (code: string, userId: string) =>
+    act(`/rooms/${code}/members/${userId}/remove`)
+  const renameMember = (code: string, userId: string, nickname: string) =>
+    act(`/rooms/${code}/members/${userId}/rename`, { nickname })
+
   const addPoints = (gameId: string, userId: string, points: number) =>
     act(`/games/${gameId}/entries`, { id: crypto.randomUUID(), userId, points })
   const voidEntry = (entryId: string) => act(`/entries/${entryId}/void`)
@@ -141,6 +165,7 @@ export const useRoomStore = defineStore('room', () => {
   function reset(): void {
     disconnect()
     state.value = null
+    lastEvent.value = null
     for (const timer of timers.values()) clearTimeout(timer)
     timers.clear()
     notices.value = []
@@ -150,6 +175,7 @@ export const useRoomStore = defineStore('room', () => {
     state,
     status,
     notices,
+    lastEvent,
     isLive,
     players,
     nicknames,
@@ -162,6 +188,10 @@ export const useRoomStore = defineStore('room', () => {
     join,
     leave,
     startGame,
+    renameRoom,
+    closeRoom,
+    removeMember,
+    renameMember,
     addPoints,
     voidEntry,
     replaceEntry,
