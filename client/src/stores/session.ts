@@ -27,17 +27,22 @@ export const useSessionStore = defineStore('session', () => {
     user.value = null
   }
 
-  /** Вызывается один раз при запуске: без неё маршрутизатор не знает, впускать ли. */
+  /**
+   * Вызывается один раз при запуске: без неё маршрутизатор не знает, впускать ли.
+   *
+   * Запрос к `/me` идёт даже без токена в localStorage: Safari сама вычищает его
+   * через 7 дней бездействия (ITP), а резервная HttpOnly-кука той чисткой не
+   * задета и продолжает опознавать браузер тем же самым токеном.
+   */
   async function restore(): Promise<void> {
     const token = localStorage.getItem(TOKEN_KEY)
-    if (token !== null) {
-      setToken(token)
-      try {
-        user.value = await api.get<CurrentUser>('/me')
-      } catch {
-        // Токен протух или база пересоздана — начинаем знакомство заново.
-        forget()
-      }
+    if (token !== null) setToken(token)
+
+    try {
+      user.value = await api.get<CurrentUser>('/me')
+    } catch {
+      // Токена нет нигде, он протух или база пересоздана — начинаем знакомство заново.
+      forget()
     }
     restored.value = true
   }

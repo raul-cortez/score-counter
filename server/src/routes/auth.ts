@@ -10,6 +10,7 @@ import {
 import { createSession } from '../repo/sessions.js'
 import { findActiveRoomCode, findRoomByCode } from '../repo/rooms.js'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
+import { sessionCookie } from '../auth/cookies.js'
 
 const guestSchema = {
   body: {
@@ -53,6 +54,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
       const user = createGuest(app.db, nickname)
       const token = createSession(app.db, user.id)
+      reply.header('set-cookie', sessionCookie(token))
       return { token, user: toPublicUser(user) }
     },
   )
@@ -118,12 +120,22 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send({ error: 'invalid_credentials' })
       }
 
-      return { token: createSession(app.db, user.id), user: toPublicUser(user) }
+      const token = createSession(app.db, user.id)
+      reply.header('set-cookie', sessionCookie(token))
+      return { token, user: toPublicUser(user) }
     },
   )
 
-  app.get('/me', { preHandler: app.requireAuth }, async (req) => {
+  /**
+   * Помимо «кто я», на каждом заходе продлевает резервную куку: у активных
+   * сессий, заведённых ещё до этой куки, она так появится сама, без повторного
+   * входа, — а Max-Age сдвигается вперёд, пока приложением вообще пользуются.
+   */
+  app.get('/me', { preHandler: app.requireAuth }, async (req, reply) => {
     const user = req.currentUser!
+    if (req.currentToken !== null) {
+      reply.header('set-cookie', sessionCookie(req.currentToken))
+    }
     return {
       ...toPublicUser(user),
       activeRoomCode: findActiveRoomCode(app.db, user.id),

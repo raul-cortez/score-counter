@@ -7,6 +7,7 @@ import type { Db } from '../db/index.js'
 import type { Registry } from '../realtime/registry.js'
 import type { Tickets } from '../realtime/tickets.js'
 import type { MutateRoom } from '../realtime/mutate.js'
+import { readSessionCookie } from '../auth/cookies.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -21,16 +22,23 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     currentUser: UserRow | null
+    /** Токен, которым опознали запрос — из заголовка или из резервной куки. */
+    currentToken: string | null
   }
 }
 
 export default fp(async (app) => {
   app.decorateRequest('currentUser', null)
+  app.decorateRequest('currentToken', null)
 
   app.addHook('onRequest', async (req) => {
     const header = req.headers.authorization
-    if (!header?.startsWith('Bearer ')) return
-    req.currentUser = findUserByToken(app.db, header.slice('Bearer '.length))
+    const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
+    const token = bearer ?? readSessionCookie(req.headers.cookie)
+    if (token === null) return
+
+    req.currentToken = token
+    req.currentUser = findUserByToken(app.db, token)
   })
 
   app.decorate('requireAuth', async (req: FastifyRequest, reply: FastifyReply) => {
