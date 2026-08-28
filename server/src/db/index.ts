@@ -9,14 +9,22 @@ export type Db = Database.Database
  * На свежей базе `rooms` уже приходит с `creator_user_id` из SCHEMA_SQL, и шаг
  * молча ничего не делает.
  */
-function migrate(db: Db): void {
-  const columns = db.prepare('PRAGMA table_info(rooms)').all() as { name: string }[]
-  if (columns.some((column) => column.name === 'creator_user_id')) return
+function hasColumn(db: Db, table: string, column: string): boolean {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  return columns.some((c) => c.name === column)
+}
 
-  db.exec('ALTER TABLE rooms ADD COLUMN creator_user_id TEXT REFERENCES users(id)')
-  // Кто фактически создал старые комнаты, база не помнит — берём текущего хоста
-  // как разумное приближение, дальше это поле только для новых комнат.
-  db.exec('UPDATE rooms SET creator_user_id = host_user_id WHERE creator_user_id IS NULL')
+function migrate(db: Db): void {
+  if (!hasColumn(db, 'rooms', 'creator_user_id')) {
+    db.exec('ALTER TABLE rooms ADD COLUMN creator_user_id TEXT REFERENCES users(id)')
+    // Кто фактически создал старые комнаты, база не помнит — берём текущего хоста
+    // как разумное приближение, дальше это поле только для новых комнат.
+    db.exec('UPDATE rooms SET creator_user_id = host_user_id WHERE creator_user_id IS NULL')
+  }
+
+  if (!hasColumn(db, 'game_players', 'removed_at')) {
+    db.exec('ALTER TABLE game_players ADD COLUMN removed_at INTEGER')
+  }
 }
 
 export function openDb(path: string): Db {

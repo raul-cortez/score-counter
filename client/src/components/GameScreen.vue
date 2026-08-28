@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { GameDetails, RoomState } from '@score/shared'
+import AppIcon from './AppIcon.vue'
 import PlayerCard from './PlayerCard.vue'
 import { looksLikeSum, parsePoints } from '../points.js'
 
@@ -11,13 +12,51 @@ const props = defineProps<{
   busy: boolean
 }>()
 
-const emit = defineEmits<{ addPoints: [userId: string, points: number] }>()
+const emit = defineEmits<{
+  addPoints: [userId: string, points: number]
+  changeLimit: [scoreLimit: number]
+  removePlayer: [userId: string]
+}>()
 
 const selectedId = ref<string | null>(null)
 const pointsInput = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 
 const isHost = computed(() => props.meId === props.state.room.hostUserId)
+
+const MIN_PLAYERS = 2
+
+/**
+ * Лимит меняется тем же приёмом, что и название комнаты: карандаш, поле,
+ * значки готово/отмена. Видит его только хост.
+ */
+const editingLimit = ref(false)
+const limitDraft = ref(props.game.scoreLimit)
+const limitInputRef = ref<HTMLInputElement | null>(null)
+
+async function startLimitEdit(): Promise<void> {
+  limitDraft.value = props.game.scoreLimit
+  editingLimit.value = true
+  await nextTick()
+  limitInputRef.value?.focus()
+  limitInputRef.value?.select()
+}
+
+function cancelLimitEdit(): void {
+  editingLimit.value = false
+}
+
+function saveLimit(): void {
+  editingLimit.value = false
+  if (limitDraft.value < 1 || limitDraft.value === props.game.scoreLimit) return
+  emit('changeLimit', limitDraft.value)
+}
+
+function requestRemovePlayer(player: { id: string; nickname: string }): void {
+  if (window.confirm(`Убрать ${player.nickname} из партии? Партия продолжится без него.`)) {
+    emit('removePlayer', player.id)
+  }
+}
 
 const iAmPlayer = computed(() => props.game.players.some((player) => player.id === props.meId))
 
@@ -124,7 +163,37 @@ function submit(): void {
 <template>
   <div class="game-root">
     <div class="header">
-      <span class="limit-info">Играем до {{ game.scoreLimit }}</span>
+      <template v-if="editingLimit">
+        <span class="limit-info">Играем до</span>
+        <input
+          ref="limitInputRef"
+          v-model.number="limitDraft"
+          class="limit-field"
+          type="number"
+          min="1"
+          max="10000"
+          @keydown.enter="saveLimit"
+          @keydown.esc="cancelLimitEdit"
+        />
+        <button class="btn-tiny" type="button" title="Готово" @click="saveLimit">
+          <AppIcon name="check" :size="14" />
+        </button>
+        <button class="btn-tiny" type="button" title="Отмена" @click="cancelLimitEdit">
+          <AppIcon name="close" :size="14" />
+        </button>
+      </template>
+      <template v-else>
+        <span class="limit-info">Играем до {{ game.scoreLimit }}</span>
+        <button
+          v-if="isHost"
+          class="btn-tiny"
+          type="button"
+          title="Изменить лимит"
+          @click="startLimitEdit"
+        >
+          <AppIcon name="pencil" :size="12" />
+        </button>
+      </template>
     </div>
 
     <div class="cards">
@@ -138,7 +207,9 @@ function submit(): void {
         :online="state.online.includes(player.id)"
         :is-you="player.id === meId"
         :is-host="player.id === state.room.hostUserId"
+        :can-remove="isHost && game.players.length > MIN_PLAYERS"
         @select="select(player.id)"
+        @remove="requestRemovePlayer(player)"
       />
     </div>
 
@@ -190,12 +261,51 @@ function submit(): void {
 }
 
 .header {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .limit-info {
   font-size: 16px;
   color: var(--text-muted);
+}
+
+.limit-field {
+  width: 90px;
+  padding: 4px 8px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 16px;
+  text-align: center;
+
+  &:focus {
+    outline: none;
+    border-color: var(--btn-bg);
+  }
+}
+
+.btn-tiny {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--border-hover);
+    color: var(--text);
+  }
 }
 
 .cards {

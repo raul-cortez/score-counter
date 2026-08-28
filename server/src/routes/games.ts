@@ -1,12 +1,22 @@
 import type { FastifyInstance } from 'fastify'
 import type { GameHistoryDetails } from '@score/shared'
-import { canStartGame } from '../domain/permissions.js'
+import { canStartGame, canManageRoom } from '../domain/permissions.js'
 import { scoreboard } from '../domain/score.js'
 import { findRoomByCode, findRoomById, listMemberIds, isMember } from '../repo/rooms.js'
 import { isGamePlayer } from '../repo/history.js'
-import { startGame, findActiveGame, findGameById, listGamePlayers } from '../repo/games.js'
+import {
+  startGame,
+  findActiveGame,
+  findGameById,
+  listGamePlayers,
+  listGamePlayerIds,
+  updateScoreLimit,
+  removeGamePlayer,
+} from '../repo/games.js'
 import { listEntries } from '../repo/entries.js'
 import { toPublicUser } from '../repo/users.js'
+import { settleGame } from './entries.js'
+import type { PendingEvent } from '../realtime/mutate.js'
 
 const startSchema = {
   body: {
@@ -18,6 +28,8 @@ const startSchema = {
     },
   },
 }
+
+const limitSchema = startSchema
 
 export const MIN_PLAYERS = 2
 export const MAX_PLAYERS = 10
@@ -49,6 +61,82 @@ export default async function gameRoutes(app: FastifyInstance): Promise<void> {
         return [
           { type: 'game_started', payload: { gameId: game.id, scoreLimit: game.score_limit } },
         ]
+      })
+    },
+  )
+
+  /**
+   * Сменить лимит очков на ходу — например, ушёл игрок, и оставшиеся хотят
+   * доиграть до другого счёта, не пересоздавая комнату. Победа пересчитывается
+   * сразу же: новый лимит может оказаться уже пройденным.
+   */
+  app.post<{ Params: { id: string }; Body: { scoreLimit: number } }>(
+    '/games/:id/limit',
+    { schema: limitSchema, preHandler: app.requireAuth },
+    async (req, reply) => {
+      const game = findGameById(app.db, req.params.id)
+      if (!game) return reply.code(404).send({ error: 'game_not_found' })
+      if (game.status !== 'active') return reply.code(409).send({ error: 'game_not_active' })
+
+      const room = findRoomById(app.db, game.room_id)!
+      if (!canManageRoom(req.currentUser!.id, room.host_user_id)) {
+        return reply.code(403).send({ error: 'not_allowed' })
+      }
+
+      return app.mutateRoom(game.room_id, () => {
+        const previous = game.score_limit
+        updateScoreLimit(app.db, game.id, req.body.scoreLimit)
+
+        const events: PendingEvent[] = [
+          { type: 'game_limit_changed', payload: { scoreLimit: req.body.scoreLimit, previous } },
+        ]
+
+        const updated = findGameById(app.db, game.id)!
+        const winner = settleGame(app.db, updated, listGamePlayerIds(app.db, game.id))
+        if (winner !== null) {
+          events.push({ type: 'game_finished', payload: { gameId: game.id, winnerUserId: winner } })
+        }
+        return events
+      })
+    },
+  )
+
+  /**
+   * Снять игрока с партии, не заканчивая её, — состав продолжает без него.
+   * Из комнаты человек при этом не выгоняется: для этого есть отдельная ручка.
+   */
+  app.post<{ Params: { id: string; userId: string } }>(
+    '/games/:id/players/:userId/remove',
+    { preHandler: app.requireAuth },
+    async (req, reply) => {
+      const game = findGameById(app.db, req.params.id)
+      if (!game) return reply.code(404).send({ error: 'game_not_found' })
+      if (game.status !== 'active') return reply.code(409).send({ error: 'game_not_active' })
+
+      const room = findRoomById(app.db, game.room_id)!
+      if (!canManageRoom(req.currentUser!.id, room.host_user_id)) {
+        return reply.code(403).send({ error: 'not_allowed' })
+      }
+
+      const targetId = req.params.userId
+      const playerIds = listGamePlayerIds(app.db, game.id)
+      if (!playerIds.includes(targetId)) {
+        return reply.code(404).send({ error: 'not_a_player' })
+      }
+      if (playerIds.length - 1 < MIN_PLAYERS) {
+        return reply.code(400).send({ error: 'bad_player_count' })
+      }
+
+      return app.mutateRoom(game.room_id, () => {
+        removeGamePlayer(app.db, game.id, targetId)
+
+        const events: PendingEvent[] = [{ type: 'game_player_removed', payload: { userId: targetId } }]
+
+        const winner = settleGame(app.db, game, listGamePlayerIds(app.db, game.id))
+        if (winner !== null) {
+          events.push({ type: 'game_finished', payload: { gameId: game.id, winnerUserId: winner } })
+        }
+        return events
       })
     },
   )

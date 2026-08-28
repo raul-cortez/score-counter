@@ -99,6 +99,12 @@ export const useRoomStore = defineStore('room', () => {
         return 'Хост удалил комнату'
       case 'member_removed':
         return `${nameOf((frame.payload as { userId: string }).userId)} удалён хостом`
+      case 'game_limit_changed': {
+        const { scoreLimit } = frame.payload as { scoreLimit: number }
+        return `Новый лимит: до ${scoreLimit}`
+      }
+      case 'game_player_removed':
+        return `${nameOf((frame.payload as { userId: string }).userId)} выбыл из партии`
       default:
         return null
     }
@@ -156,6 +162,11 @@ export const useRoomStore = defineStore('room', () => {
   const renameMember = (code: string, userId: string, nickname: string) =>
     act(`/rooms/${code}/members/${userId}/rename`, { nickname })
 
+  const changeLimit = (gameId: string, scoreLimit: number) =>
+    act(`/games/${gameId}/limit`, { scoreLimit })
+  const removeGamePlayer = (gameId: string, userId: string) =>
+    act(`/games/${gameId}/players/${userId}/remove`)
+
   const addPoints = (gameId: string, userId: string, points: number) =>
     act(`/games/${gameId}/entries`, { id: crypto.randomUUID(), userId, points })
   const voidEntry = (entryId: string) => act(`/entries/${entryId}/void`)
@@ -192,6 +203,8 @@ export const useRoomStore = defineStore('room', () => {
     closeRoom,
     removeMember,
     renameMember,
+    changeLimit,
+    removeGamePlayer,
     addPoints,
     voidEntry,
     replaceEntry,

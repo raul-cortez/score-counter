@@ -201,6 +201,8 @@ watch(
           :me-id="meId"
           :busy="busy"
           @add-points="(userId, points) => guard(() => room.addPoints(game!.id, userId, points))"
+          @change-limit="(scoreLimit) => guard(() => room.changeLimit(game!.id, scoreLimit))"
+          @remove-player="(userId) => guard(() => room.removeGamePlayer(game!.id, userId))"
         />
         <EntriesLog
           :state="room.state"

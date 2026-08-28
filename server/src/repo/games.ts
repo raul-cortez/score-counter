@@ -47,6 +47,7 @@ export function findLatestGame(db: Db, roomId: string): GameRow | null {
   )
 }
 
+/** Все, кто когда-либо играл эту партию, — для истории: ушедший не выпадает из неё. */
 export function listGamePlayers(db: Db, gameId: string): UserRow[] {
   return db
     .prepare(
@@ -58,12 +59,50 @@ export function listGamePlayers(db: Db, gameId: string): UserRow[] {
     .all(gameId) as UserRow[]
 }
 
+/** Только те, кто ещё в партии, — для живого табло. */
+export function listActiveGamePlayers(db: Db, gameId: string): UserRow[] {
+  return db
+    .prepare(
+      `SELECT users.* FROM game_players
+       JOIN users ON users.id = game_players.user_id
+       WHERE game_players.game_id = ? AND game_players.removed_at IS NULL
+       ORDER BY game_players.seat`,
+    )
+    .all(gameId) as UserRow[]
+}
+
+/**
+ * Состав, который считается при проверке победы и праве писать очки.
+ * Убранный игрок дальше не пишет и не разыгрывается — совсем как ушедший из комнаты.
+ */
 export function listGamePlayerIds(db: Db, gameId: string): string[] {
   return (
     db
-      .prepare('SELECT user_id FROM game_players WHERE game_id = ? ORDER BY seat')
+      .prepare(
+        `SELECT user_id FROM game_players
+         WHERE game_id = ? AND removed_at IS NULL
+         ORDER BY seat`,
+      )
       .all(gameId) as { user_id: string }[]
   ).map((row) => row.user_id)
+}
+
+/**
+ * Мягкое снятие, как и везде: запись не удаляется, чтобы прошлые очки игрока
+ * остались в журнале партии и в истории.
+ */
+export function removeGamePlayer(db: Db, gameId: string, userId: string): void {
+  db.prepare(
+    `UPDATE game_players SET removed_at = ?
+     WHERE game_id = ? AND user_id = ? AND removed_at IS NULL`,
+  ).run(Date.now(), gameId, userId)
+}
+
+export function updateScoreLimit(db: Db, gameId: string, scoreLimit: number): void {
+  db.prepare(`UPDATE games SET score_limit = ? WHERE id = ? AND status = 'active'`).run(
+    scoreLimit,
+    gameId,
+  )
 }
 
 /** Состав копируется из переданного списка одной транзакцией со строкой игры. */

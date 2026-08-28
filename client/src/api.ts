@@ -26,6 +26,7 @@ const MESSAGES: Record<string, string> = {
   game_already_active: 'игра уже идёт',
   game_not_active: 'игра уже закончилась',
   bad_player_count: 'играть можно вдвоём и больше',
+  not_a_player: 'этого игрока в партии уже нет',
   entry_already_voided: 'эта запись уже отменена',
   too_many_attempts: 'слишком много попыток, подождите немного',
   bad_name: 'нужно название',

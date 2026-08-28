@@ -60,6 +60,27 @@ describe('стор комнаты', () => {
     expect(text).not.toContain(VERA.id)
   })
 
+  it('сообщает о смене лимита и снятии игрока по именам', () => {
+    const store = useRoomStore()
+    store.apply({ type: 'sync', seq: 1, state: roomState({ members: [ANYA, BORIS, VERA] }) })
+
+    store.apply({
+      type: 'game_limit_changed',
+      seq: 2,
+      payload: { scoreLimit: 300, previous: 100 },
+      state: roomState({ members: [ANYA, BORIS, VERA] }),
+    })
+    expect(store.notices.at(-1)!.text).toContain('300')
+
+    store.apply({
+      type: 'game_player_removed',
+      seq: 3,
+      payload: { userId: VERA.id },
+      state: roomState({ members: [ANYA, BORIS, VERA] }),
+    })
+    expect(store.notices.at(-1)!.text).toContain('Вера')
+  })
+
   // Ушедший остаётся в составе игры, и его очки продолжают показываться.
   it('находит имя того, кто вышел из комнаты, но остался в игре', () => {
     const store = useRoomStore()

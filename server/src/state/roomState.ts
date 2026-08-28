@@ -2,7 +2,7 @@ import type { RoomState, GameDetails } from '@score/shared'
 import type { Db } from '../db/index.js'
 import { scoreboard } from '../domain/score.js'
 import { findRoomById, listMembers } from '../repo/rooms.js'
-import { findLatestGame, listGamePlayers, type GameRow } from '../repo/games.js'
+import { findLatestGame, listActiveGamePlayers, type GameRow } from '../repo/games.js'
 import { listEntries } from '../repo/entries.js'
 import { toPublicUser } from '../repo/users.js'
 
@@ -40,7 +40,9 @@ export function buildRoomState(db: Db, roomId: string, online: string[] = []): R
 }
 
 function buildGameDetails(db: Db, game: GameRow): GameDetails {
-  const players = listGamePlayers(db, game.id).map(toPublicUser)
+  // Живой снимок показывает только тех, кто ещё в партии — убранный игрок пропадает
+  // с табло, но не из журнала и не из истории (там listGamePlayers, без фильтра).
+  const players = listActiveGamePlayers(db, game.id).map(toPublicUser)
   const entries = listEntries(db, game.id)
 
   return {

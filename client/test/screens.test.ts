@@ -152,6 +152,59 @@ describe('табло', () => {
 
     expect(screen.emitted('addPoints')).toBeUndefined()
   })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('хост меняет лимит на ходу', async () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: ANYA.id, busy: false },
+    })
+
+    await screen.find('[title="Изменить лимит"]').trigger('click')
+    await screen.find('.limit-field').setValue('250')
+    await screen.find('[title="Готово"]').trigger('click')
+
+    expect(screen.emitted('changeLimit')).toEqual([[250]])
+  })
+
+  it('обычному игроку карандаш лимита не показывает', () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: BORIS.id, busy: false },
+    })
+
+    expect(screen.find('[title="Изменить лимит"]').exists()).toBe(false)
+  })
+
+  it('хост убирает игрока из партии втроём и больше', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const threePlayers = game({ players: [ANYA, BORIS, VERA] })
+    const screen = mount(GameScreen, {
+      props: { state, game: threePlayers, meId: ANYA.id, busy: false },
+    })
+
+    await screen.findAll('.remove-btn')[2].trigger('click')
+
+    expect(screen.emitted('removePlayer')).toEqual([[VERA.id]])
+  })
+
+  it('не даёт убрать игрока, если играют только двое', () => {
+    const screen = mount(GameScreen, {
+      props: { state, game: current, meId: ANYA.id, busy: false },
+    })
+
+    expect(screen.find('.remove-btn').exists()).toBe(false)
+  })
+
+  it('обычному игроку кнопку убрать не показывает', () => {
+    const threePlayers = game({ players: [ANYA, BORIS, VERA] })
+    const screen = mount(GameScreen, {
+      props: { state, game: threePlayers, meId: BORIS.id, busy: false },
+    })
+
+    expect(screen.find('.remove-btn').exists()).toBe(false)
+  })
 })
 
 describe('журнал раздач', () => {

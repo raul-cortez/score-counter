@@ -79,6 +79,8 @@ export type RoomEventType =
   | 'room_closed'
   | 'game_started'
   | 'game_finished'
+  | 'game_limit_changed'
+  | 'game_player_removed'
   | 'entry_added'
   | 'entry_voided'
 

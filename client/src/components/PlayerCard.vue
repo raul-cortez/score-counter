@@ -11,9 +11,15 @@ const props = defineProps<{
   online: boolean
   isYou: boolean
   isHost: boolean
+  canRemove: boolean
 }>()
 
-defineEmits<{ select: [] }>()
+const emit = defineEmits<{ select: []; remove: [] }>()
+
+function requestRemove(event: MouseEvent): void {
+  event.stopPropagation()
+  emit('remove')
+}
 
 const progress = computed(() => {
   if (props.scoreLimit <= 0) return 0
@@ -29,6 +35,16 @@ const progress = computed(() => {
       <AppIcon v-if="isHost" class="badge" name="crown" :size="15" title="Хост" />
       <span class="dot" :class="{ on: online }" :title="online ? 'В сети' : 'Не в сети'" />
     </span>
+
+    <button
+      v-if="canRemove"
+      class="remove-btn"
+      type="button"
+      title="Убрать из партии"
+      @click="requestRemove"
+    >
+      <AppIcon name="close" :size="12" />
+    </button>
 
     <span class="name">
       {{ player.nickname }}
@@ -124,5 +140,27 @@ const progress = computed(() => {
   font-weight: 700;
   line-height: 1;
   position: relative;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-hint);
+  cursor: pointer;
+
+  &:hover {
+    border-color: #e05252;
+    color: #e05252;
+  }
 }
 </style>

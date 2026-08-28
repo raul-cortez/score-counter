@@ -50,7 +50,7 @@ type ReplaceEntryBody = { id: string; points: number }
  * Возвращает победителя, если игра именно сейчас завершилась: об этом нужно
  * отдельное событие, чтобы клиент показал экран победы, а не вывел его из снимка.
  */
-function settleGame(db: Db, game: GameRow, playerIds: string[]): string | null {
+export function settleGame(db: Db, game: GameRow, playerIds: string[]): string | null {
   const winner = findWinner(listEntries(db, game.id), playerIds, game.score_limit)
 
   if (winner && game.status === 'active') {
