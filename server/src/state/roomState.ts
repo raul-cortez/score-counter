@@ -30,6 +30,7 @@ export function buildRoomState(db: Db, roomId: string, online: string[] = []): R
       name: room.name,
       hasPassword: room.password_hash !== null,
       hostUserId: room.host_user_id,
+      creatorUserId: room.creator_user_id,
     },
     members,
     // Соединение может пережить выход из комнаты — показываем только своих.

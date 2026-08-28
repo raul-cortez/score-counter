@@ -164,12 +164,22 @@ function requestRename(member: PublicUser): void {
       <p v-if="state.members.length < MIN_PLAYERS" class="hint">
         Нужен хотя бы ещё один игрок — отправьте им ссылку.
       </p>
-
-      <button class="btn-quiet danger" type="button" :disabled="busy" @click="requestClose">
-        Удалить комнату
-      </button>
     </template>
     <p v-else class="hint">Ждём, пока хост начнёт игру.</p>
+
+    <!--
+      Хост мог уже смениться, а создатель — нет: он заводил комнату и вправе
+      закрыть её в любой момент, даже перестав быть хостом.
+    -->
+    <button
+      v-if="meId === state.room.hostUserId || meId === state.room.creatorUserId"
+      class="btn-quiet danger"
+      type="button"
+      :disabled="busy"
+      @click="requestClose"
+    >
+      Удалить комнату
+    </button>
 
   </div>
 </template>

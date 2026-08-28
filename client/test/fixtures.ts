@@ -64,6 +64,7 @@ export function roomState(
       name: 'Преферанс',
       hasPassword: false,
       hostUserId: ANYA.id,
+      creatorUserId: ANYA.id,
       ...over.room,
     },
     members: over.members ?? [ANYA, BORIS],

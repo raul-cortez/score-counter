@@ -16,13 +16,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
 CREATE TABLE IF NOT EXISTS rooms (
-  id            TEXT PRIMARY KEY,
-  code          TEXT NOT NULL UNIQUE,
-  name          TEXT NOT NULL,
-  password_hash TEXT,
-  host_user_id  TEXT NOT NULL REFERENCES users(id),
-  created_at    INTEGER NOT NULL,
-  closed_at     INTEGER
+  id               TEXT PRIMARY KEY,
+  code             TEXT NOT NULL UNIQUE,
+  name             TEXT NOT NULL,
+  password_hash    TEXT,
+  host_user_id     TEXT NOT NULL REFERENCES users(id),
+  creator_user_id  TEXT REFERENCES users(id),
+  created_at       INTEGER NOT NULL,
+  closed_at        INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS room_members (

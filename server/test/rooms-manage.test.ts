@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type { RoomState } from '@score/shared'
 import { makeApp, closeApp, createGuestSession, bearer, type TestApp } from './helpers.js'
+import { setHost } from '../src/repo/rooms.js'
 
 let ctx: TestApp
 
@@ -123,6 +124,34 @@ describe('POST /api/rooms/:code/close', () => {
     })
 
     expect(res.statusCode).toBe(403)
+  })
+
+  it('создатель закрывает комнату, даже потеряв роль хоста', async () => {
+    const anya = await createGuestSession(ctx.app, 'Аня')
+    const boris = await createGuestSession(ctx.app, 'Борис')
+    const code = await makeRoom(anya)
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/join`,
+      headers: bearer(boris),
+      payload: {},
+    })
+
+    // Хост сменился, но Аня как создатель комнаты сохраняет право её закрыть.
+    const room = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/rooms/${code}/state`,
+      headers: bearer(anya),
+    })
+    setHost(ctx.db, (room.json() as RoomState).room.id, boris.user.id)
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/rooms/${code}/close`,
+      headers: bearer(anya),
+    })
+
+    expect(res.statusCode).toBe(200)
   })
 })
 

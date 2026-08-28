@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { RoomSummary } from '@score/shared'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
-import { canManageRoom } from '../domain/permissions.js'
+import { canManageRoom, canCloseRoom } from '../domain/permissions.js'
 import {
   createRoom,
   addMember,
@@ -212,7 +212,7 @@ export default async function roomRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const room = requireOpenRoom(app, req.params.code, reply)
       if (!room) return reply
-      if (!canManageRoom(req.currentUser!.id, room.host_user_id)) {
+      if (!canCloseRoom(req.currentUser!.id, room.host_user_id, room.creator_user_id)) {
         return reply.code(403).send({ error: 'not_allowed' })
       }
 

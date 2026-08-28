@@ -10,6 +10,7 @@ export type RoomRow = {
   name: string
   password_hash: string | null
   host_user_id: string
+  creator_user_id: string
   created_at: number
   closed_at: number | null
 }
@@ -44,8 +45,8 @@ export function createRoom(
   hostUserId: string,
 ): RoomRow {
   const insert = db.prepare(
-    `INSERT INTO rooms (id, code, name, password_hash, host_user_id, created_at)
-     VALUES (@id, @code, @name, @password_hash, @host_user_id, @created_at)`,
+    `INSERT INTO rooms (id, code, name, password_hash, host_user_id, creator_user_id, created_at)
+     VALUES (@id, @code, @name, @password_hash, @host_user_id, @creator_user_id, @created_at)`,
   )
 
   // Коллизия шестизначного кода маловероятна, но UNIQUE её поймает — просто пробуем ещё раз.
@@ -56,6 +57,8 @@ export function createRoom(
       name,
       password_hash: passwordHash,
       host_user_id: hostUserId,
+      // Создатель фиксируется раз и навсегда — в отличие от хоста, роль дальше не передаётся.
+      creator_user_id: hostUserId,
       created_at: Date.now(),
       closed_at: null,
     }

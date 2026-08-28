@@ -325,6 +325,23 @@ describe('зал ожидания', () => {
     expect(screen.emitted('close-room')).toHaveLength(1)
   })
 
+  it('создатель видит и жмёт «Удалить комнату», даже потеряв роль хоста', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const screen = mount(WaitingRoom, {
+      props: {
+        state: roomState({ game: null, room: { hostUserId: BORIS.id, creatorUserId: ANYA.id } }),
+        meId: ANYA.id,
+        defaultLimit: 100,
+        busy: false,
+      },
+    })
+
+    expect(screen.find('.btn-primary').exists()).toBe(false)
+    await screen.find('.danger').trigger('click')
+
+    expect(screen.emitted('close-room')).toHaveLength(1)
+  })
+
   it('отменённое подтверждение не удаляет комнату', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     const screen = mount(WaitingRoom, {

@@ -44,6 +44,7 @@ export type RoomInfo = {
   name: string
   hasPassword: boolean
   hostUserId: string
+  creatorUserId: string
 }
 
 export type GameDetails = {

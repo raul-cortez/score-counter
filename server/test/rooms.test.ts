@@ -30,6 +30,7 @@ describe('POST /api/rooms', () => {
       name: 'Вечер преферанса',
       hasPassword: false,
       hostUserId: anya.user.id,
+      creatorUserId: anya.user.id,
     })
     expect(state.members).toEqual([{ id: anya.user.id, nickname: 'Аня', hasEmail: false }])
     expect(state.game).toBeNull()

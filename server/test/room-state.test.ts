@@ -42,6 +42,7 @@ describe('buildRoomState', () => {
       name: 'Преферанс',
       hasPassword: false,
       hostUserId: anya.id,
+      creatorUserId: anya.id,
     })
     expect(state.members.map((m) => m.nickname).sort()).toEqual(['Аня', 'Борис'])
     expect(state.members.map((m) => m.id).sort()).toEqual([anya.id, boris.id].sort())
