@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ApiError, api, describeError } from '../api.js'
 import { useRoomStore } from '../stores/room.js'
 import { useSessionStore } from '../stores/session.js'
+import { DEFAULT_SCORE_LIMIT } from '../limits.js'
 import ConnectionBanner from '../components/ConnectionBanner.vue'
 import EntriesLog from '../components/EntriesLog.vue'
 import AppIcon from '../components/AppIcon.vue'
@@ -34,7 +35,7 @@ const showVictory = computed(() => game.value?.status === 'finished')
 const showBoard = computed(() => game.value !== null && game.value.status === 'active')
 
 /** Рестарт предлагается с лимитом прошлой игры — обычно он же и нужен. */
-const defaultLimit = computed(() => game.value?.scoreLimit ?? 100)
+const defaultLimit = computed(() => game.value?.scoreLimit ?? DEFAULT_SCORE_LIMIT)
 
 async function guard<T>(action: () => Promise<T>): Promise<void> {
   busy.value = true
