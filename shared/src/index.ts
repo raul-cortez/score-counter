@@ -3,7 +3,8 @@ export type GameStatus = 'active' | 'finished' | 'abandoned'
 export type PublicUser = {
   id: string
   nickname: string
-  hasEmail: boolean
+  /** Привязан ли логин: без него аккаунт узнаётся только этим браузером. */
+  hasLogin: boolean
 }
 
 /** Себя видно подробнее: клиенту нужно знать, куда вернуться после перезагрузки. */

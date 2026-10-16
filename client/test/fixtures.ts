@@ -7,9 +7,9 @@ import type { GameDetails, RoomState, ScoreEntry } from '@score/shared'
  * расхождение формы поймает проверка типов, а не отладка в браузере.
  */
 
-export const ANYA = { id: 'u-anya', nickname: 'Аня', hasEmail: false }
-export const BORIS = { id: 'u-boris', nickname: 'Борис', hasEmail: false }
-export const VERA = { id: 'u-vera', nickname: 'Вера', hasEmail: false }
+export const ANYA = { id: 'u-anya', nickname: 'Аня', hasLogin: false }
+export const BORIS = { id: 'u-boris', nickname: 'Борис', hasLogin: false }
+export const VERA = { id: 'u-vera', nickname: 'Вера', hasLogin: false }
 
 export function entry(over: Partial<ScoreEntry> = {}): ScoreEntry {
   return {

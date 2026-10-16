@@ -19,14 +19,14 @@ vi.mock('../src/api.js', () => ({
 beforeEach(() => {
   setActivePinia(createPinia())
   post.mockReset()
-  post.mockResolvedValue({ id: 'u-anya', nickname: 'Аня Б.', hasEmail: false, activeRoomCode: null })
+  post.mockResolvedValue({ id: 'u-anya', nickname: 'Аня Б.', hasLogin: false, activeRoomCode: null })
   get.mockReset()
   get.mockResolvedValue({ nickname: null })
 })
 
 function editorWithUser() {
   const session = useSessionStore()
-  session.user = { id: 'u-anya', nickname: 'Аня', hasEmail: false, activeRoomCode: null }
+  session.user = { id: 'u-anya', nickname: 'Аня', hasLogin: false, activeRoomCode: null }
   return { editor: mount(NicknameEditor), session }
 }
 

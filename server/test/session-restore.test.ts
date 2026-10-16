@@ -24,7 +24,7 @@ describe('GET /api/me', () => {
     expect(res.json()).toEqual({
       id: anya.user.id,
       nickname: 'Аня',
-      hasEmail: false,
+      hasLogin: false,
       activeRoomCode: null,
     })
   })

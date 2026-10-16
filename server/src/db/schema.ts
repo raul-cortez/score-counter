@@ -2,7 +2,7 @@ export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   nickname      TEXT NOT NULL,
-  email         TEXT UNIQUE,
+  login         TEXT UNIQUE,
   password_hash TEXT,
   created_at    INTEGER NOT NULL
 );

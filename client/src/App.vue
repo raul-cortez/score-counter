@@ -4,6 +4,7 @@ import { useTheme } from './composables/useTheme.js'
 import { useSessionStore } from './stores/session.js'
 import ThemeToggle from './components/ThemeToggle.vue'
 import NicknameEditor from './components/NicknameEditor.vue'
+import AccountPanel from './components/AccountPanel.vue'
 
 const { restoreTheme } = useTheme()
 const session = useSessionStore()
@@ -25,6 +26,11 @@ onMounted(restoreTheme)
         кнопками ему хватает самого себя.
       -->
       <NicknameEditor v-if="session.user" class="who" />
+      <!--
+        Аккаунт стоит вплотную к имени: и то и другое — про «кто я в этом
+        приложении», и врозь они бы читались как две несвязанные кнопки.
+      -->
+      <AccountPanel />
       <span class="spacer" />
       <ThemeToggle />
       <!--

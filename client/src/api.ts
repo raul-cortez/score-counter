@@ -32,6 +32,10 @@ const MESSAGES: Record<string, string> = {
   bad_name: 'нужно название',
   bad_nickname: 'нужно имя',
   cannot_remove_host: 'хоста нельзя убрать из комнаты',
+  invalid_credentials: 'неверный логин или пароль',
+  login_taken: 'такой логин уже занят',
+  account_already_linked: 'логин уже привязан к этому аккаунту',
+  validation_failed: 'проверьте логин и пароль',
 }
 
 export function describeError(error: unknown): string {

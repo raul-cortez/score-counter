@@ -25,6 +25,16 @@ function migrate(db: Db): void {
   if (!hasColumn(db, 'game_players', 'removed_at')) {
     db.exec('ALTER TABLE game_players ADD COLUMN removed_at INTEGER')
   }
+
+  /**
+   * Почта уступила место логину: @ за столом на телефоне искать долго, а вход по
+   * паре «логин — пароль» нужен ровно затем же, зачем нужна была почта. Адреса,
+   * привязанные до этой правки, логинами и остаются — колонка переименована на
+   * месте, чтобы привязки не потерялись.
+   */
+  if (hasColumn(db, 'users', 'email') && !hasColumn(db, 'users', 'login')) {
+    db.exec('ALTER TABLE users RENAME COLUMN email TO login')
+  }
 }
 
 export function openDb(path: string): Db {

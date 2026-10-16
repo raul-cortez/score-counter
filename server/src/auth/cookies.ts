@@ -15,6 +15,17 @@ export function sessionCookie(token: string): string {
   return `${COOKIE_NAME}=${token}; Path=/; Max-Age=${MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Lax`
 }
 
+/**
+ * Стирает куку при выходе.
+ *
+ * Без этого выход был бы половинчатым: из localStorage токен исчез бы, а кука
+ * осталась — и следующий же запрос к `/me` опознал бы вышедшего по ней.
+ * Атрибуты повторяют выставление, иначе браузер сочтёт это другой кукой.
+ */
+export function clearedSessionCookie(): string {
+  return `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+}
+
 export function readSessionCookie(header: string | undefined): string | null {
   if (!header) return null
   for (const part of header.split(';')) {

@@ -22,10 +22,13 @@ describe('POST /api/auth/guest', () => {
     expect(res.statusCode).toBe(200)
     const body = res.json()
     expect(body.token).toEqual(expect.any(String))
+    // Форма та же, что у `/me`: клиент кладёт ответ поверх себя целиком, и все
+    // три входа — гость, пароль, привязка — обязаны отдавать одно и то же.
     expect(body.user).toEqual({
       id: expect.any(String),
       nickname: 'Аня',
-      hasEmail: false,
+      hasLogin: false,
+      activeRoomCode: null,
     })
   })
 

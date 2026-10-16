@@ -20,6 +20,7 @@ export type IconName =
   | 'check'
   | 'close'
   | 'shuffle'
+  | 'person'
 
 const PATHS: Record<IconName, string[]> = {
   crown: ['M4 18h16', 'M4 18 2.9 8.4l5.2 3.3L12 5l3.9 6.7 5.2-3.3L20 18'],
@@ -38,6 +39,7 @@ const PATHS: Record<IconName, string[]> = {
   check: ['M5 12.5l4.6 4.5L19 7'],
   close: ['M6.5 6.5l11 11', 'M17.5 6.5l-11 11'],
   shuffle: ['M16 3h5v5', 'M4 20L21 3', 'M21 16v5h-5', 'M15 15l6 6', 'M4 4l5 5'],
+  person: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4.5 20a7.5 7.5 0 0 1 15 0'],
 }
 
 withDefaults(defineProps<{ name: IconName; size?: number }>(), { size: 18 })

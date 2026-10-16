@@ -27,7 +27,7 @@ describe('POST /api/me/nickname', () => {
     expect(res.json()).toEqual({
       id: guest.user.id,
       nickname: 'Анна Петровна',
-      hasEmail: false,
+      hasLogin: false,
       activeRoomCode: null,
     })
 

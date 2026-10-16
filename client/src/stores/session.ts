@@ -53,6 +53,51 @@ export const useSessionStore = defineStore('session', () => {
     user.value = res.user
   }
 
+  /**
+   * Вход по логину и паролю.
+   *
+   * Это единственный способ узнать человека, когда пропало всё остальное: и
+   * localStorage, и резервная кука. Пароль набирают один раз на устройство, зато
+   * после него аккаунт узнаётся с любого телефона.
+   */
+  async function loginWithPassword(login: string, password: string): Promise<void> {
+    const res = await api.post<{ token: string; user: CurrentUser }>('/auth/login', {
+      login,
+      password,
+    })
+    remember(res.token)
+    user.value = res.user
+  }
+
+  /**
+   * Привязка логина к нынешнему гостю.
+   *
+   * Заводя вторую запись, мы потеряли бы историю партий и место за столом, поэтому
+   * логин приделывается к тому же пользователю.
+   */
+  async function attachLogin(login: string, password: string): Promise<void> {
+    user.value = await api.post<CurrentUser>('/auth/upgrade', { login, password })
+  }
+
+  /**
+   * Выход. Сессию и резервную куку гасит сервер — клиенту они недоступны.
+   *
+   * Забыть себя локально нужно в любом случае, даже если сети не было: иначе
+   * человек нажмёт «выйти» и останется внутри, а это хуже, чем непогашенный
+   * токен, который всё равно некому предъявить.
+   */
+  async function logout(): Promise<void> {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Сеть подвела на самом выходе. Себя всё равно забываем: серверная сессия
+      // без токена бесполезна, а оставить человека внутри после нажатия «выйти»
+      // хуже, чем редкий случай, когда куку погасить не удалось.
+    } finally {
+      forget()
+    }
+  }
+
   async function refresh(): Promise<void> {
     user.value = await api.get<CurrentUser>('/me')
   }
@@ -68,5 +113,17 @@ export const useSessionStore = defineStore('session', () => {
     return res.nickname
   }
 
-  return { user, restored, restore, loginAsGuest, rename, randomPastNickname, refresh, forget }
+  return {
+    user,
+    restored,
+    restore,
+    loginAsGuest,
+    loginWithPassword,
+    attachLogin,
+    logout,
+    rename,
+    randomPastNickname,
+    refresh,
+    forget,
+  }
 })

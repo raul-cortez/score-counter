@@ -32,7 +32,7 @@ describe('POST /api/rooms', () => {
       hostUserId: anya.user.id,
       creatorUserId: anya.user.id,
     })
-    expect(state.members).toEqual([{ id: anya.user.id, nickname: 'Аня', hasEmail: false }])
+    expect(state.members).toEqual([{ id: anya.user.id, nickname: 'Аня', hasLogin: false }])
     expect(state.game).toBeNull()
 
     const membership = ctx.db

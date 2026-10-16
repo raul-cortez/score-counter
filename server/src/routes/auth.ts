@@ -1,16 +1,16 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import {
   createGuest,
   toPublicUser,
-  findUserByEmail,
-  attachEmail,
+  findUserByLogin,
+  attachCredentials,
   renameUser,
   randomPastNickname,
 } from '../repo/users.js'
-import { createSession } from '../repo/sessions.js'
+import { createSession, deleteSession } from '../repo/sessions.js'
 import { findActiveRoomCode, findRoomByCode } from '../repo/rooms.js'
 import { hashPassword, verifyPassword } from '../auth/passwords.js'
-import { sessionCookie } from '../auth/cookies.js'
+import { sessionCookie, clearedSessionCookie } from '../auth/cookies.js'
 
 const guestSchema = {
   body: {
@@ -24,25 +24,28 @@ const guestSchema = {
 }
 
 /**
- * Проверка адреса намеренно минимальная: «что-то, собака, что-то, точка, что-то».
- * Строгие регулярные выражения для email отвергают действительные адреса чаще,
- * чем ловят опечатки, а подтверждения почты у нас пока нет.
+ * Логин — короткое слово, которое набирают с телефона за столом, поэтому в нём
+ * только латиница, цифры и `._-`, без собаки: её ещё надо найти на клавиатуре.
+ * Кириллицу не пускаем не из вредности — раскладку на телефоне переключают
+ * незаметно для себя, и такой логин потом не набрать.
+ *
+ * Регистр не важен: в базу логин уходит приведённым к нижнему.
  */
-const EMAIL_PATTERN = '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$'
+const LOGIN_PATTERN = '^[A-Za-z0-9._-]{3,32}$'
 
 const credentialsSchema = {
   body: {
     type: 'object',
-    required: ['email', 'password'],
+    required: ['login', 'password'],
     additionalProperties: false,
     properties: {
-      email: { type: 'string', pattern: EMAIL_PATTERN, maxLength: 200 },
+      login: { type: 'string', pattern: LOGIN_PATTERN },
       password: { type: 'string', minLength: 8, maxLength: 200 },
     },
   },
 }
 
-type Credentials = { email: string; password: string }
+type Credentials = { login: string; password: string }
 
 export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { nickname: string } }>(
@@ -55,7 +58,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = createGuest(app.db, nickname)
       const token = createSession(app.db, user.id)
       reply.header('set-cookie', sessionCookie(token))
-      return { token, user: toPublicUser(user) }
+      // Комнат у нового гостя ещё нет, но поле в ответе быть обязано: клиент
+      // кладёт `user` поверх себя целиком и на этом же типе держит остальные входы.
+      return { token, user: { ...toPublicUser(user), activeRoomCode: null } }
     },
   )
 
@@ -92,27 +97,58 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   )
 
+  /**
+   * Привязка логина к гостю, который уже играет.
+   *
+   * Второй раз это запрещено: менять логин, не спросив текущий пароль, значило бы
+   * дать любому, кто дорвался до чужого телефона с открытой сессией, молча забрать
+   * аккаунт себе.
+   */
   app.post<{ Body: Credentials }>(
     '/auth/upgrade',
     { schema: credentialsSchema, preHandler: app.requireAuth },
     async (req, reply) => {
-      const email = req.body.email.toLowerCase()
-      const existing = findUserByEmail(app.db, email)
-      if (existing) {
-        return reply.code(409).send({ error: 'email_taken' })
+      const user = req.currentUser!
+      if (user.login !== null) {
+        return reply.code(409).send({ error: 'account_already_linked' })
       }
 
-      const user = req.currentUser!
-      attachEmail(app.db, user.id, email, await hashPassword(req.body.password))
-      return toPublicUser({ ...user, email })
+      const login = req.body.login.toLowerCase()
+      if (findUserByLogin(app.db, login)) {
+        return reply.code(409).send({ error: 'login_taken' })
+      }
+
+      attachCredentials(app.db, user.id, login, await hashPassword(req.body.password))
+      // Форма ответа та же, что у `/me`: клиент кладёт её поверх себя целиком и не
+      // должен при этом потерять код комнаты, куда человеку возвращаться.
+      return {
+        ...toPublicUser({ ...user, login }),
+        activeRoomCode: findActiveRoomCode(app.db, user.id),
+      }
     },
   )
 
   app.post<{ Body: Credentials }>(
     '/auth/login',
-    { schema: credentialsSchema },
+    {
+      schema: credentialsSchema,
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '5 minutes',
+          /**
+           * Тело к этому моменту разобрано, поэтому ключ — пара «клиент + логин»:
+           * подбор пароля к одному аккаунту не должен закрывать вход остальным
+           * за тем же адресом, а за одним wi-fi за столом сидит вся компания.
+           */
+          hook: 'preValidation',
+          keyGenerator: (req: FastifyRequest) =>
+            `${req.ip}:${(req.body as Partial<Credentials> | undefined)?.login?.toLowerCase() ?? ''}`,
+        },
+      },
+    },
     async (req, reply) => {
-      const user = findUserByEmail(app.db, req.body.email.toLowerCase())
+      const user = findUserByLogin(app.db, req.body.login.toLowerCase())
       if (!user?.password_hash) {
         return reply.code(401).send({ error: 'invalid_credentials' })
       }
@@ -122,9 +158,24 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
       const token = createSession(app.db, user.id)
       reply.header('set-cookie', sessionCookie(token))
-      return { token, user: toPublicUser(user) }
+      // Код активной комнаты обязателен и здесь: человек, вернувшийся на новом
+      // телефоне, должен попасть обратно за свой стол, а не в пустое лобби.
+      return {
+        token,
+        user: { ...toPublicUser(user), activeRoomCode: findActiveRoomCode(app.db, user.id) },
+      }
     },
   )
+
+  /**
+   * Выход. Мало стереть токен у себя — куку гасит только сервер, а без этого
+   * следующий же запрос к `/me` опознал бы вышедшего по ней.
+   */
+  app.post('/auth/logout', { preHandler: app.requireAuth }, async (req, reply) => {
+    if (req.currentToken !== null) deleteSession(app.db, req.currentToken)
+    reply.header('set-cookie', clearedSessionCookie())
+    return { ok: true }
+  })
 
   /**
    * Помимо «кто я», на каждом заходе продлевает резервную куку: у активных

@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import Database from 'better-sqlite3'
 import { openDb } from '../src/db/index.js'
 
 describe('openDb', () => {
@@ -49,6 +53,58 @@ describe('openDb', () => {
     const second = insert.run('e2').lastInsertRowid
 
     expect(Number(second)).toBeGreaterThan(Number(first))
+    db.close()
+  })
+})
+
+/**
+ * Колонка переименована уже после первого релиза, а `CREATE TABLE IF NOT EXISTS`
+ * чужую таблицу не трогает. Без переноса на боевой базе осталась бы половина
+ * схемы: привязки не потерялись бы, но и найти их стало бы нечем.
+ */
+describe('перенос учётных данных на логин', () => {
+  /** База, какой она была до перехода: у пользователя есть почта и пароль. */
+  function dbWithOldSchema(): { path: string; dir: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'score-db-'))
+    const path = join(dir, 'score.db')
+
+    const old = new Database(path)
+    old.exec(`CREATE TABLE users (
+      id            TEXT PRIMARY KEY,
+      nickname      TEXT NOT NULL,
+      email         TEXT UNIQUE,
+      password_hash TEXT,
+      created_at    INTEGER NOT NULL
+    )`)
+    old.prepare(
+      `INSERT INTO users (id, nickname, email, password_hash, created_at)
+       VALUES ('u1', 'Аня', 'anya@example.com', 'хеш', 0)`,
+    ).run()
+    old.close()
+
+    return { path, dir }
+  }
+
+  it('старая почта становится логином', () => {
+    const { path, dir } = dbWithOldSchema()
+    const db = openDb(path)
+
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get('u1') as { login: string | null }
+    expect(row.login).toBe('anya@example.com')
+
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('на свежей базе колонка сразу называется login', () => {
+    const db = openDb(':memory:')
+
+    const columns = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map(
+      (column) => column.name,
+    )
+    expect(columns).toContain('login')
+    expect(columns).not.toContain('email')
+
     db.close()
   })
 })

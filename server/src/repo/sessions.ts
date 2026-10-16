@@ -13,6 +13,11 @@ export function createSession(db: Db, userId: string): string {
   return token
 }
 
+/** Выход: сессия уходит из базы целиком, а не помечается — возвращаться в неё нечем. */
+export function deleteSession(db: Db, token: string): void {
+  db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token))
+}
+
 export function findUserByToken(db: Db, token: string): UserRow | null {
   const row = db
     .prepare(
